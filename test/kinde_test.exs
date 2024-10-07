@@ -1,8 +1,9 @@
 defmodule KindeTest do
   use ExUnit.Case
-  doctest Kinde
 
-  test "greets the world" do
-    assert Kinde.hello() == :world
+  describe "auth/1" do
+  end
+
+  describe "token/3" do
   end
 end
