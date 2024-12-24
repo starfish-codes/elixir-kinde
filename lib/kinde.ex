@@ -25,7 +25,7 @@ defmodule Kinde do
   @scopes ~w[openid profile email offline]
   @config_keys ~w[domain client_id client_secret redirect_uri]a
 
-  @state_management Application.compile_env(:kinde, :state_management, Kinde.AgentStateManagement)
+  @state_management Application.compile_env(:kinde, :state_management, Kinde.StateManagementAgent)
 
   adapter Tesla.Adapter.Finch, name: KindeFinch
 
@@ -62,7 +62,7 @@ defmodule Kinde do
     {:ok, "#{domain}/oauth2/auth?#{qs}"}
   end
 
-  @spec token(String.t() | params(), String.t(), map()) :: {:ok, map(), map()} | {:error, term()}
+  @spec token(config(), String.t(), map()) :: {:ok, map(), map()} | {:error, term()}
   def token(config, code, state) when is_binary(state) do
     with :ok <- check_config(config),
          {:ok, params} <- take_state(state) do
