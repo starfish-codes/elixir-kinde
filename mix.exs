@@ -24,7 +24,8 @@ defmodule Kinde.MixProject do
     [
       {:tesla, "~> 1.12"},
       {:finch, "~> 0.19.0"},
-      {:joken_jwks, "~> 1.6"}
+      {:joken_jwks, "~> 1.6"},
+      {:req, "~> 0.5.8"}
     ]
   end
 end
