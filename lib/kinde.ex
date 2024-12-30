@@ -2,8 +2,6 @@ defmodule Kinde do
   @moduledoc """
   """
 
-  use Tesla
-
   alias Kinde.IdToken
 
   require Logger
@@ -26,12 +24,6 @@ defmodule Kinde do
   @config_keys ~w[domain client_id client_secret redirect_uri]a
 
   @state_management Application.compile_env(:kinde, :state_management, Kinde.StateManagementAgent)
-
-  adapter Tesla.Adapter.Finch, name: KindeFinch
-
-  plug Tesla.Middleware.EncodeFormUrlencoded
-  plug Tesla.Middleware.DecodeJson
-  plug Tesla.Middleware.Logger
 
   @spec auth(config(), map()) :: {:ok, String.t()} | {:error, term()}
   def auth(config, extra_params \\ %{}) do
@@ -94,18 +86,18 @@ defmodule Kinde do
   end
 
   defp token_request(base_url, params) do
-    [{Tesla.Middleware.BaseUrl, base_url}]
-    |> Tesla.client()
-    |> post("/oauth2/token", params)
+    options = Keyword.merge([form: params], Application.get_env(:kinde, :req_options, []))
+
+    Req.post("#{base_url}/oauth2/token", options)
   end
 
-  defp token_response(%Tesla.Env{status: 200, body: body}) do
+  defp token_response(%Req.Response{status: 200, body: body}) do
     body
     |> Map.fetch!("id_token")
     |> IdToken.verify_and_validate()
   end
 
-  defp token_response(%Tesla.Env{status: status}) do
+  defp token_response(%Req.Response{status: status}) do
     Logger.error("Couldn't request token: #{status}")
     {:error, :no_token}
   end
