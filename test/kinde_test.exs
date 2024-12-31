@@ -79,7 +79,7 @@ defmodule KindeTest do
     end
 
     test "returns token properly", %{state: state} do
-      Req.Test.stub(Kinde, fn conn ->
+      Req.Test.expect(Kinde, fn conn ->
         {:ok, id_token} =
           Kinde.TestJwksStrategy.sign(%{
             "sub" => @kinde_id,
@@ -103,7 +103,7 @@ defmodule KindeTest do
 
     @tag extra_params: %{"token-test" => true}
     test "returns extra params properly", %{state: state, extra_params: extra_params} do
-      Req.Test.stub(Kinde, fn conn ->
+      Req.Test.expect(Kinde, fn conn ->
         {:ok, id_token} =
           Kinde.TestJwksStrategy.sign(%{
             "sub" => @kinde_id,
@@ -120,7 +120,7 @@ defmodule KindeTest do
     end
 
     test "returns error no_token when request for token fails", %{state: state} do
-      Req.Test.stub(Kinde, &Plug.Conn.send_resp(&1, 500, "internal server error"))
+      Req.Test.expect(Kinde, &Plug.Conn.send_resp(&1, 500, "internal server error"))
 
       log =
         capture_log(fn ->
