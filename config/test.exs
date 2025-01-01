@@ -8,10 +8,8 @@ config :joken_jwks, Kinde.TokenStrategy,
   jwks_url: "https://starfish-dev.eu.kinde.com/.well-known/jwks",
   log_level: :debug
 
-config :kinde,
-  req_options: [
-    plug: {Req.Test, Kinde}
-  ],
+config :kinde, Kinde,
+  plug: {Req.Test, Kinde},
   retry: false
 
 config :kinde, Kinde.ManagementAPI,

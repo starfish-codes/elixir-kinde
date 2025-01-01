@@ -108,12 +108,8 @@ defmodule Kinde.ManagementAPI do
       do: {:reply, build_api_request(business_domain, access_token, opts), state}
 
   @impl GenServer
-  def handle_info(
-        :renew_token,
-        %{client_id: client_id, client_secret: client_secret, business_domain: business_domain} =
-          state
-      ) do
-    case init_state(client_id, client_secret, business_domain) do
+  def handle_info(:renew_token, state) do
+    case init_state(state) do
       {:ok, new_state} ->
         {:noreply, new_state}
 
@@ -142,8 +138,9 @@ defmodule Kinde.ManagementAPI do
     payload = auth_payload(client_id, client_secret, business_domain)
     request = build_oauth_request(business_domain, payload, opts)
 
-    with {:ok, %Req.Response{status: status, body: body}} <- Req.request(request),
-         do: init_state(status, body, state)
+    with {:ok, %Req.Response{status: status, body: body}} <- Req.request(request) do
+      init_state(status, body, state)
+    end
   end
 
   defp init_state(200, %{"access_token" => access_token, "expires_in" => expires_in}, state) do

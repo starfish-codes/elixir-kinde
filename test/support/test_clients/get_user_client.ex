@@ -1,4 +1,4 @@
-defmodule Kinde.TestClients.ManagementAPI do
+defmodule Kinde.TestClients.GetUserClient do
   @moduledoc """
   Plug that mocks the behaviour for Authentication call
   """
@@ -40,7 +40,7 @@ defmodule Kinde.TestClients.ManagementAPI do
       "id" => kinde_id,
       "first_name" => "John",
       "last_name" => "Doe",
-      "preferred_email" => "john.doe@starfish.team",
+      "preferred_email" => "john.doe@email.team",
       "provided_id" => "82cef2c2-31c2-4b95-b0f8-a169bc4c27a5",
       "is_suspended" => false,
       "total_sign_ins" => 0,

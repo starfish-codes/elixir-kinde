@@ -4,26 +4,23 @@ defmodule Kinde.ManagementAPITest do
   import ExUnit.CaptureLog, only: [capture_log: 1, with_log: 1]
 
   alias Kinde.ManagementAPI
-  alias Kinde.TestClients.ManagementAPI, as: TestClient
+  alias Kinde.TestClients.{GetUserClient, ListUsersClient, RenewTokenClient}
 
   @moduletag :capture_log
+  setup do
+    %{
+      opts: [
+        business_domain: Faker.Internet.url(),
+        client_id: "KINDE-TEST-CLIENT-ID",
+        client_secret: "KINDE-TEST-CLIENT-SECRET",
+        owner: self()
+      ]
+    }
+  end
 
-  @test_access_token "test-access-token"
-
-  describe "get_user/1" do
-    setup do
-      %{
-        opts: [
-          business_domain: Faker.Internet.url(),
-          client_id: "KINDE-TEST-CLIENT-ID",
-          client_secret: "KINDE-TEST-CLIENT-SECRET",
-          owner: self()
-        ]
-      }
-    end
-
+  describe "get_user/2" do
     test "success", %{opts: opts} do
-      Req.Test.stub(ManagementAPI, TestClient)
+      Req.Test.stub(ManagementAPI, GetUserClient)
 
       {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
@@ -34,18 +31,16 @@ defmodule Kinde.ManagementAPITest do
       assert user["id"] == user_id
       assert user["first_name"] == "John"
       assert user["last_name"] == "Doe"
-      assert user["preferred_email"] == "john.doe@starfish.team"
+      assert user["preferred_email"] == "john.doe@email.team"
     end
 
-    test "error" do
-      # Req.Test.expect(Kinde.ManagementAPI, &get_user_error_mock/1)
-      Req.Test.stub(ManagementAPI, {TestClient, get_user: &get_user_error_mock/1})
+    test "error", %{opts: opts} do
+      Req.Test.stub(ManagementAPI, {GetUserClient, get_user: &get_user_error_mock/1})
 
-      pid = start_supervised!({ManagementAPI, @params})
+      {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
-      Req.Test.allow(ManagementAPI, self(), pid)
+      {result, log} = with_log(fn -> ManagementAPI.get_user("does-not-matter", pid) end)
 
-      {result, log} = with_log(fn -> ManagementAPI.get_user("does-not-matter") end)
       assert {:error, :kinde_api_error_response} = result
       assert log =~ "Kinde Management API ID_REQUIRED error: ID is required"
       assert log =~ "Kinde Management API USER_INVALID error: User invalid"
@@ -54,14 +49,8 @@ defmodule Kinde.ManagementAPITest do
     defp get_user_error_mock(%{request_path: "/api/v1/user"} = conn) do
       error = %{
         "errors" => [
-          %{
-            code: "ID_REQUIRED",
-            message: "ID is required"
-          },
-          %{
-            "code" => "USER_INVALID",
-            "message" => "User invalid"
-          }
+          %{"code" => "ID_REQUIRED", "message" => "ID is required"},
+          %{"code" => "USER_INVALID", "message" => "User invalid"}
         ]
       }
 
@@ -71,42 +60,25 @@ defmodule Kinde.ManagementAPITest do
     end
   end
 
-  describe "list_users/0" do
-    test "success" do
-      Req.Test.expect(Kinde.ManagementAPI, 2, &list_users_mock/1)
-      assert {:ok, users} = ManagementAPI.list_users()
+  describe "list_users/1" do
+    test "success", %{opts: opts} do
+      Req.Test.stub(ManagementAPI, ListUsersClient)
+
+      {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
+
+      assert {:ok, users} = ManagementAPI.list_users(pid)
       assert Enum.any?(users)
     end
 
-    test "error" do
-      Req.Test.expect(Kinde.ManagementAPI, 4, &list_users_error_mock/1)
+    test "error", %{opts: opts} do
+      Req.Test.stub(ManagementAPI, {ListUsersClient, list_users: &list_users_error_mock/1})
 
-      {result, log} = with_log(fn -> ManagementAPI.list_users() end)
+      {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
+
+      {result, log} = with_log(fn -> ManagementAPI.list_users(pid) end)
+
       assert {:error, :kinde_api_unknown_error} = result
       assert log =~ "Unknown Kinde Management API 500 error: \"INTERNAL SERVER ERROR\""
-    end
-
-    defp list_users_mock(
-           %{request_path: "/api/v1/users", query_params: %{"next_token" => _next_token}} = conn
-         ) do
-      Req.Test.json(conn, %{
-        code: "OK",
-        message: "Success",
-        users: nil,
-        next_token: nil
-      })
-    end
-
-    defp list_users_mock(%{request_path: "/api/v1/users"} = conn) do
-      Req.Test.json(conn, %{
-        code: "OK",
-        message: "Success",
-        users: [
-          %{name: "Dude 1"},
-          %{name: "Dude 2"}
-        ],
-        next_token: "Mjc6OjpuYW1lX2FzYw=="
-      })
     end
 
     defp list_users_error_mock(%{request_path: "/api/v1/users"} = conn) do
@@ -115,19 +87,33 @@ defmodule Kinde.ManagementAPITest do
   end
 
   describe "renew_token" do
-    test "error" do
-      pid = Process.whereis(ManagementAPI)
+    setup %{opts: opts} do
+      Req.Test.stub(ManagementAPI, RenewTokenClient)
+
+      {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
+
+      %{pid: pid}
+    end
+
+    test "success", %{pid: pid} do
+      Req.Test.stub(ManagementAPI, {RenewTokenClient, oauth_token: &renew_token_mock/1})
+
+      send(pid, :renew_token)
+
+      Process.sleep(100)
+
+      %{renew_token_timer: timer_ref, access_token: new_token} = :sys.get_state(pid)
+
+      timeout = Process.read_timer(timer_ref)
+
+      assert_in_delta timeout, 86_399_000, 500
+      assert new_token == "new-access-token", "Renews access token"
+    end
+
+    test "error", %{pid: pid} do
       %{access_token: prev_access_token} = :sys.get_state(pid)
 
-      Req.Test.expect(Kinde.ManagementAPI, fn conn ->
-        conn
-        |> Plug.Conn.put_status(401)
-        |> Req.Test.json(%{
-          error: "invalid_client",
-          error_description:
-            "Client authentication failed (e.g., unknown client, no client authentication included, or unsupported authentication method)."
-        })
-      end)
+      Req.Test.stub(ManagementAPI, {RenewTokenClient, oauth_token: &renew_token_error_mock/1})
 
       log =
         capture_log(fn ->
@@ -135,24 +121,55 @@ defmodule Kinde.ManagementAPITest do
           Process.sleep(100)
         end)
 
-      pid = Process.whereis(ManagementAPI)
-
       %{renew_token_timer: timer_ref, access_token: new_access_token} = :sys.get_state(pid)
+
       timeout = Process.read_timer(timer_ref)
+
       assert_in_delta timeout, 300_000, 500, "Schedules next renew in 5 minutes"
       assert new_access_token == prev_access_token, "Doesn't renew access token"
       assert log =~ "Kinde error: Client authentication failed"
     end
-  end
 
-  defp mock_oauth2_token(%{request_path: "/oauth2/token"} = conn) do
-    dbg()
+    test "unknow error", %{pid: pid} do
+      %{access_token: prev_access_token} = :sys.get_state(pid)
 
-    Req.Test.json(conn, %{
-      access_token: @test_access_token,
-      expires_in: 86_399,
-      scope: "",
-      token_type: "bearer"
-    })
+      Req.Test.stub(
+        ManagementAPI,
+        {RenewTokenClient, oauth_token: &Plug.Conn.send_resp(&1, 500, "INTERNAL SERVER ERROR")}
+      )
+
+      log =
+        capture_log(fn ->
+          send(pid, :renew_token)
+          Process.sleep(100)
+        end)
+
+      %{renew_token_timer: timer_ref, access_token: new_access_token} = :sys.get_state(pid)
+
+      timeout = Process.read_timer(timer_ref)
+
+      assert_in_delta timeout, 300_000, 500, "Schedules next renew in 5 minutes"
+      assert new_access_token == prev_access_token, "Doesn't renew access token"
+      assert log =~ "Unknown Kinde 500 error: \"INTERNAL SERVER ERROR\""
+    end
+
+    defp renew_token_mock(conn) do
+      Req.Test.json(conn, %{
+        access_token: "new-access-token",
+        expires_in: 86_399,
+        scope: "",
+        token_type: "bearer"
+      })
+    end
+
+    defp renew_token_error_mock(conn) do
+      conn
+      |> Plug.Conn.put_status(401)
+      |> Req.Test.json(%{
+        error: "invalid_client",
+        error_description:
+          "Client authentication failed (e.g., unknown client, no client authentication included, or unsupported authentication method)."
+      })
+    end
   end
 end

@@ -86,7 +86,7 @@ defmodule Kinde do
   end
 
   defp token_request(base_url, params) do
-    options = Keyword.merge([form: params], Application.get_env(:kinde, :req_options, []))
+    options = Keyword.merge([form: params], Application.get_env(:kinde, __MODULE__, []))
 
     Req.post("#{base_url}/oauth2/token", options)
   end
