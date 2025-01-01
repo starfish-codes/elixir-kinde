@@ -5,7 +5,7 @@ defmodule Kinde.TestClients.ManagementAPI do
 
   @behaviour Plug
 
-  import Plug.Conn
+  # import Plug.Conn
   import Req.Test
 
   @test_access_token "test-access-token"

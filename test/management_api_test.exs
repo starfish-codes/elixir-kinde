@@ -1,5 +1,5 @@
 defmodule Kinde.ManagementAPITest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   import ExUnit.CaptureLog, only: [capture_log: 1, with_log: 1]
 
@@ -10,51 +10,26 @@ defmodule Kinde.ManagementAPITest do
 
   @test_access_token "test-access-token"
 
-  @params [
-    business_domain: "https://starfish.kinde.com",
-    client_id: "KINDE-TEST-CLIENT-ID",
-    client_secret: "KINDE-TEST-CLIENT-SECRET"
-  ]
-
-  #  setup do
-  #    Req.Test.expect(Kinde.ManagementAPI, &mock_oauth2_token/1)
-  #
-  #    IO.inspect(self(), label: :outside)
-  #
-  #    params =
-  #      Keyword.put(@params, :prepend_request,
-  #        allow: fn request ->
-  #          IO.inspect(self(), label: :inside)
-  #          IO.inspect(Process.whereis(ManagementAPI), label: :management)
-  #          # pid = Process.whereis(ManagementAPI)
-  #
-  #          # Req.Test.allow(ManagementAPI, self(), pid) |> dbg()
-  #          request
-  #        end
-  #      )
-  #
-  #    {:ok, pid} = GenServer.start(ManagementAPI, params, name: ManagementAPI)
-  #
-  #    # Req.Test.allow(ManagementAPI, self(), pid)
-  #
-  #    on_exit(fn -> GenServer.stop(pid) end)
-  #
-  #    :ok
-  #  end
-
   describe "get_user/1" do
-    test "success" do
-      user_id = "kp_9657302f36e640a5bad5dbf3aa548e04"
+    setup do
+      %{
+        opts: [
+          business_domain: Faker.Internet.url(),
+          client_id: "KINDE-TEST-CLIENT-ID",
+          client_secret: "KINDE-TEST-CLIENT-SECRET",
+          owner: self()
+        ]
+      }
+    end
 
+    test "success", %{opts: opts} do
       Req.Test.stub(ManagementAPI, TestClient)
 
-      pid = start_supervised!({ManagementAPI, @params})
+      {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
-      dbg(pid)
-      dbg(self())
-      Req.Test.allow(ManagementAPI, self(), pid)
+      user_id = "kp_9657302f36e640a5bad5dbf3aa548e04"
 
-      assert {:ok, user} = ManagementAPI.get_user(user_id)
+      assert {:ok, user} = ManagementAPI.get_user(user_id, pid)
 
       assert user["id"] == user_id
       assert user["first_name"] == "John"

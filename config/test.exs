@@ -14,6 +14,6 @@ config :kinde,
   ],
   retry: false
 
-config :kinde,
-  management_api_req_options: [plug: {Req.Test, Kinde.ManagementAPI}],
+config :kinde, Kinde.ManagementAPI,
+  plug: {Req.Test, Kinde.ManagementAPI},
   retry: false
