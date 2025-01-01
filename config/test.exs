@@ -11,4 +11,9 @@ config :joken_jwks, Kinde.TokenStrategy,
 config :kinde,
   req_options: [
     plug: {Req.Test, Kinde}
-  ]
+  ],
+  retry: false
+
+config :kinde,
+  management_api_req_options: [plug: {Req.Test, Kinde.ManagementAPI}],
+  retry: false

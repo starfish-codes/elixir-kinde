@@ -21,8 +21,8 @@ defmodule Kinde.ManagementAPI do
 
   @impl __MODULE__
   def get_user(kinde_id) do
-    with {:ok, %Tesla.Env{status: status, body: body}} <-
-           get(client(), "/api/v1/user?id=#{kinde_id}") do
+    with {_request, %Req.Response{status: status, body: body}} <-
+           Req.run(request(), url: "/api/v1/user?id=#{kinde_id}") do
       handle_response(status, body)
     end
   end
@@ -31,7 +31,8 @@ defmodule Kinde.ManagementAPI do
   def list_users, do: list_users([], nil)
 
   defp list_users(users, next_token) do
-    with {:ok, %Tesla.Env{status: status, body: body}} <- get(client(), users_url(next_token)),
+    with {_request, %Req.Response{status: status, body: body}} <-
+           Req.run(request(), url: users_url(next_token)),
          {:ok, payload} <- handle_response(status, body) do
       handle_users_response(payload, users)
     end
@@ -56,7 +57,7 @@ defmodule Kinde.ManagementAPI do
   defp users_url(nil), do: "/api/v1/users"
   defp users_url(next_token), do: "/api/v1/users?next_token=#{next_token}"
 
-  defp client, do: GenServer.call(__MODULE__, :client)
+  defp request, do: GenServer.call(__MODULE__, :http_client)
 
   defp handle_response(200, body) do
     {:ok, body}
@@ -83,31 +84,40 @@ defmodule Kinde.ManagementAPI do
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   @impl GenServer
-  def init(opts) do
+  def init(opts), do: {:ok, opts, {:continue, :init_state}}
+
+  @impl GenServer
+  def handle_continue(:init_state, opts) do
     with {:ok, client_id} <- Keyword.fetch(opts, :client_id),
          {:ok, client_secret} <- Keyword.fetch(opts, :client_secret),
-         {:ok, business_domain} <- Keyword.fetch(opts, :business_domain) do
-      init_state(client_id, client_secret, business_domain)
+         {:ok, business_domain} <- Keyword.fetch(opts, :business_domain),
+         prepend_request <- Keyword.get(opts, :prepend_request, []),
+         {:ok, state} <- init_state(client_id, client_secret, business_domain, prepend_request) do
+      state = Map.put(state, :business_domain, business_domain)
+
+      {:noreply, state}
     else
-      :error -> :ignore
+      reason ->
+        {:stop, reason}
     end
   end
 
   @impl GenServer
   def handle_call(
-        :client,
+        :http_client,
         _from,
         %{access_token: access_token, business_domain: business_domain} = state
       ) do
-    client =
-      Tesla.client([
-        Tesla.Middleware.JSON,
-        {Tesla.Middleware.Headers, [{"accept", "application/json"}]},
-        {Tesla.Middleware.BearerAuth, token: access_token},
-        {Tesla.Middleware.BaseUrl, business_domain}
-      ])
+    req =
+      [
+        base_url: business_domain,
+        auth: {:bearer, access_token},
+        headers: [{"accept", "application/json"}]
+      ]
+      |> Req.new()
+      |> Req.Request.merge_options(req_options())
 
-    {:reply, client, state}
+    {:reply, req, state}
   end
 
   @impl GenServer
@@ -125,32 +135,34 @@ defmodule Kinde.ManagementAPI do
     end
   end
 
-  defp init_state(client_id, client_secret, business_domain) do
-    auth_client =
-      Tesla.client([
-        Tesla.Middleware.EncodeFormUrlencoded,
-        Tesla.Middleware.DecodeJson,
-        {Tesla.Middleware.BaseUrl, business_domain}
-      ])
-
-    payload = %{
+  defp auth_payload(client_id, client_secret, business_domain) do
+    %{
       grant_type: :client_credentials,
       client_id: client_id,
       client_secret: client_secret,
       audience: "#{business_domain}/api"
     }
+  end
 
-    with {:ok, %Tesla.Env{status: status, body: body}} <-
-           post(auth_client, "/oauth2/token", payload) do
-      init_state(status, body, client_id, client_secret)
-    end
+  defp init_state(client_id, client_secret, business_domain, prepend_request \\ []) do
+    payload = auth_payload(client_id, client_secret, business_domain)
+
+    request =
+      [form: payload, base_url: business_domain, url: "/oauth2/token", method: :post]
+      |> Req.new()
+      |> Req.Request.merge_options(req_options())
+      |> Req.Request.prepend_request_steps(prepend_request)
+
+    with {_request, %Req.Response{status: status, body: body}} <- Req.run(request),
+         do: init_state(status, body, client_id, client_secret, prepend_request)
   end
 
   defp init_state(
          200,
          %{"access_token" => access_token, "expires_in" => expires_in},
          client_id,
-         client_secret
+         client_secret,
+         _prepend_request
        ) do
     Logger.info("Access token obtained successfully")
 
@@ -167,16 +179,19 @@ defmodule Kinde.ManagementAPI do
          _status,
          %{"error" => error, "error_description" => description},
          _client_id,
-         _client_secret
+         _client_secret,
+         _prepend_request
        ) do
     Logger.error("Kinde error: #{description}")
     {:error, error}
   end
 
-  defp init_state(status, body, _client_id, _client_secret) do
+  defp init_state(status, body, _client_id, _client_secret, _prepend_request) do
     Logger.error("Unknown Kinde #{status} error: " <> inspect(body))
     {:error, :unknown_kinde_error}
   end
 
   defp schedule_renew_token(timeout), do: Process.send_after(self(), :renew_token, timeout)
+
+  defp req_options, do: Application.get_env(:kinde, :management_api_req_options, [])
 end
