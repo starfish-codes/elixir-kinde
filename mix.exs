@@ -27,7 +27,6 @@ defmodule Kinde.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:tesla, "~> 1.12"},
       {:finch, "~> 0.19.0"},
       {:joken_jwks, "~> 1.6"},
       {:req, "~> 0.5.8"},
