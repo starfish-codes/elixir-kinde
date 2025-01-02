@@ -7,15 +7,42 @@ defmodule Kinde.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      {Finch, name: KindeFinch},
-      Kinde.StateManagementAgent,
-      Kinde.TokenStrategy
-    ]
+    children =
+      [
+        {Finch, name: Kinde.Finch},
+        Kinde.StateManagementAgent
+      ] ++ token_strategy() ++ management_api()
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Kinde.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp token_strategy do
+    if Application.get_env(:kinde, :token_strategy, false) do
+      [Kinde.TokenStrategy]
+    else
+      []
+    end
+  end
+
+  defp management_api do
+    if Application.get_env(:kinde, :management_api, false) do
+      [{Kinde.ManagementApi, management_api_opts()}]
+    else
+      []
+    end
+  end
+
+  defp management_api_opts,
+    do: Enum.reduce(~w[business_domain client_id client_secret]a, [], &put_config/2)
+
+  defp put_config(key, opts) do
+    case Application.fetch_env(:kinde, key) do
+      {:ok, value} ->
+        Keyword.put(opts, key, value)
+
+      :error ->
+        opts
+    end
   end
 end

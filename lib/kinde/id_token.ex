@@ -7,5 +7,5 @@ defmodule Kinde.IdToken do
   add_hook(JokenJwks, strategy: @strategy)
 
   @impl Joken.Config
-  def token_config(), do: default_claims(skip: ~w[aud iss]a)
+  def token_config, do: default_claims(skip: ~w[aud iss]a)
 end

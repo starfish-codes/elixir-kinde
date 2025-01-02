@@ -1,13 +1,15 @@
 defmodule Kinde.ManagementAPI do
   @moduledoc """
-  Module responsible to manage users on Kinde
+  Maintains access token for the Management API
+
+  See https://docs.kinde.com/kinde-apis/management/
   """
 
   use GenServer
 
   require Logger
 
-  @finch_name KindeFinch
+  @finch_name Kinde.Finch
 
   @retry_timeout :timer.minutes(5)
 
@@ -100,24 +102,15 @@ defmodule Kinde.ManagementAPI do
   def init(opts) do
     case required_configuration(opts) do
       {:ok, config} ->
-        {:ok, Map.put(config, :opts, opts), {:continue, :init_state}}
+        {:ok, Map.put(config, :opts, opts), {:continue, :postinit}}
 
       :error ->
-        # TODO: make it more informative
-        {:stop, :missing_required_configuration}
+        :ignore
     end
   end
 
   @impl GenServer
-  def handle_continue(:init_state, state) do
-    case init_state(state) do
-      {:ok, state} ->
-        {:noreply, state}
-
-      {:error, reason} ->
-        raise "Don't know what to do yet with #{reason}"
-    end
-  end
+  def handle_continue(:postinit, state), do: renew_token(state)
 
   @impl GenServer
   def handle_call(
@@ -128,15 +121,7 @@ defmodule Kinde.ManagementAPI do
       do: {:reply, build_api_request(business_domain, access_token, opts), state}
 
   @impl GenServer
-  def handle_info(:renew_token, state) do
-    case init_state(state) do
-      {:ok, new_state} ->
-        {:noreply, new_state}
-
-      {:error, _reason} ->
-        {:noreply, %{state | renew_token_timer: schedule_renew_token(@retry_timeout)}}
-    end
-  end
+  def handle_info(:renew_token, state), do: renew_token(state)
 
   defp auth_payload(client_id, client_secret, business_domain) do
     %{
@@ -145,6 +130,16 @@ defmodule Kinde.ManagementAPI do
       client_secret: client_secret,
       audience: "#{business_domain}/api"
     }
+  end
+
+  defp renew_token(state) do
+    case init_state(state) do
+      {:ok, new_state} ->
+        {:noreply, new_state}
+
+      {:error, _reason} ->
+        {:noreply, %{state | renew_token_timer: schedule_renew_token(@retry_timeout)}}
+    end
   end
 
   defp init_state(
