@@ -1,5 +1,7 @@
 defmodule Kinde.ManagementAPI do
-  @moduledoc false
+  @moduledoc """
+  Module responsible to manage users on Kinde
+  """
 
   use GenServer
 
@@ -9,6 +11,15 @@ defmodule Kinde.ManagementAPI do
 
   @retry_timeout :timer.minutes(5)
 
+  @doc """
+  Returns a registered user on Kinde
+
+  ## Examples
+
+      iex> get_user("kid1223")
+      {:ok, %{"first_name" => "Mary", "last_name" => "Doe"}}
+
+  """
   @spec get_user(String.t(), GenServer.server()) :: {:ok, map()} | {:error, term()}
   def get_user(kinde_id, server \\ __MODULE__) do
     request = request(server)
@@ -19,6 +30,15 @@ defmodule Kinde.ManagementAPI do
     end
   end
 
+  @doc """
+  Returns a list of users registered on Kinde
+
+  ## Examples
+
+      iex> list_users()
+      {:ok, %{"users" => [%{name: "John"}], "next_token" => "Mjc6OjpuYW1lX2FzYw=="}}
+
+  """
   @spec list_users(GenServer.server()) :: {:ok, [map()]} | {:error, term()}
   def list_users(server \\ __MODULE__),
     do: list_users([], nil, server)

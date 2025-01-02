@@ -1,5 +1,6 @@
 defmodule Kinde do
   @moduledoc """
+  Module that supports OAuth2 for Kinde
   """
 
   alias Kinde.IdToken
@@ -25,6 +26,18 @@ defmodule Kinde do
 
   @state_management Application.compile_env(:kinde, :state_management, Kinde.StateManagementAgent)
 
+  @doc """
+  Generates the OAuth2 redirect url
+
+  ### Examples
+
+      iex> auth(%{domain: "https://myapp...", client_id: "value", client_secret: "value", redirect_uri: "value"})
+      {:ok, "https://myapp.com/oauth2/auth?"}
+
+      iex> auth(%{client_id: "value", client_secret: "value", redirect_uri: "value"})
+      {:error, :missing_config_key}
+
+  """
   @spec auth(config(), map()) :: {:ok, String.t()} | {:error, term()}
   def auth(config, extra_params \\ %{}) do
     with :ok <- check_config(config),
@@ -54,6 +67,18 @@ defmodule Kinde do
     {:ok, "#{domain}/oauth2/auth?#{qs}"}
   end
 
+  @doc """
+  Returns the token for Kinde Client
+
+  ### Examples
+
+      iex> token(%{client_id: "value"}, "base64code", "state_hash")
+      {:ok, %{given_name: "John"}, %{extra_params: "additional data"}}
+
+     iex> auth(%{client_id: "value", client_secret: "value", redirect_uri: "value"})
+      {:error, :missing_config_key}
+
+  """
   @spec token(config(), String.t(), map()) :: {:ok, map(), map()} | {:error, term()}
   def token(config, code, state) when is_binary(state) do
     with :ok <- check_config(config),
