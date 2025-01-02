@@ -5,12 +5,14 @@ defmodule Kinde.Application do
 
   use Application
 
+  @jwks_url Application.compile_env!(:kinde, :jwks_url)
+
   @impl true
   def start(_type, _args) do
     children = [
       {Finch, name: KindeFinch},
       Kinde.StateManagementAgent,
-      Kinde.TokenStrategy
+      {Kinde.TokenStrategy, [jwks_url: @jwks_url]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
