@@ -9,6 +9,12 @@ defmodule Kinde.TokenStrategy do
 
   @spec init_opts(opts :: Keyword.t()) :: Keyword.t()
   def init_opts(opts) do
+    opts
+    |> put_jwks_url()
+    |> Keyword.put_new(:explicit_alg, "RS256")
+  end
+
+  defp put_jwks_url(opts) do
     if Keyword.has_key?(opts, :jwks_url) do
       opts
     else

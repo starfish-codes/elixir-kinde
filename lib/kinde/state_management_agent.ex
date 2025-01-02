@@ -1,6 +1,6 @@
 defmodule Kinde.StateManagementAgent do
   @moduledoc """
-  TBD
+  Simple State Management implementation. Used by default
   """
 
   @behaviour Kinde.StateManagement
@@ -15,4 +15,7 @@ defmodule Kinde.StateManagementAgent do
 
   @impl Kinde.StateManagement
   def take_state(state), do: {:ok, Agent.get_and_update(__MODULE__, &Map.pop!(&1, state))}
+
+  @impl Kinde.StateManagement
+  def cleanup_state(state), do: Agent.update(__MODULE__, &Map.delete(&1, state))
 end
