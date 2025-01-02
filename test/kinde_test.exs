@@ -1,73 +1,73 @@
 defmodule KindeTest do
   use ExUnit.Case
 
-  import ExUnit.CaptureLog, only: [capture_log: 1]
+  import ExUnit.CaptureLog
+  import Kinde.TestHelpers
+  import Plug.Conn
+  import Req.Test
 
   alias Kinde
+  alias Kinde.StateManagementAgent
 
   @moduletag :set_req_test_from_context
 
-  @domain "https://mysuperapp.com"
+  setup do
+    domain = Faker.Internet.url()
 
-  @config %{
-    domain: @domain,
-    client_id: "test_client_id",
-    client_secret: "test_client_tsecret",
-    redirect_uri: "#{@domain}/callback",
-    prompt: "create"
-  }
+    config = %{
+      domain: domain,
+      client_id: "test_client_id",
+      client_secret: "test_client_secret",
+      redirect_uri: Faker.Internet.url(),
+      prompt: "create"
+    }
+
+    %{domain: domain, config: config}
+  end
 
   describe "auth/1" do
-    test "returns the redirect url for kinde sign in" do
-      assert {:ok, redirect_url} = Kinde.auth(@config)
-
-      assert redirect_url =~ "#{@domain}/oauth2/auth?"
-    end
-
-    test "sets the default scope if not present" do
-      assert {:ok, redirect_url} = Kinde.auth(@config)
-
-      redirect_url = URI.decode(redirect_url)
-
-      [_url, query_params] = String.split(redirect_url, "?")
-
-      assert %{"scope" => "openid profile email offline"} = URI.decode_query(query_params)
-    end
-
-    test "sets the custom scope if present" do
-      config = Map.put(@config, :scopes, ["openid", "password"])
+    test "returns the redirect url for kinde sign in", %{domain: domain, config: config} do
       assert {:ok, redirect_url} = Kinde.auth(config)
+      assert String.starts_with?(redirect_url, "#{domain}/oauth2/auth?")
 
-      redirect_url = URI.decode(redirect_url)
-
-      [_url, query_params] = String.split(redirect_url, "?")
-
-      assert %{"scope" => "openid password"} = URI.decode_query(query_params)
+      %URI{query: query} = URI.parse(redirect_url)
+      assert %{"scope" => "openid profile email offline"} = URI.decode_query(query)
     end
 
-    test "returns error if missing config attribute" do
-      config = Map.delete(@config, :prompt)
+    test "sets the custom scope if present", %{config: config} do
+      assert {:ok, redirect_url} =
+               config
+               |> Map.put(:scopes, ["openid", "password"])
+               |> Kinde.auth()
 
-      for {key, _value} <- config do
-        invalid_config = Map.delete(config, key)
+      %URI{query: query} = URI.parse(redirect_url)
+      assert %{"scope" => "openid password"} = URI.decode_query(query)
+    end
 
-        assert {:error, :missing_config_key} = Kinde.auth(invalid_config)
-      end
+    test "returns error if missing config attribute", %{config: config} do
+      assert {:error, :missing_config_key} =
+               config
+               |> Map.delete(:domain)
+               |> Kinde.auth()
     end
   end
 
   describe "token/3" do
-    alias Kinde.StateManagementAgent
-
-    @code Faker.String.base64()
-    @kinde_id Faker.UUID.v4()
-    @given_name Faker.Person.first_name()
-    @family_name Faker.Person.last_name()
-    @email Faker.Internet.email()
-    @picture Faker.Internet.url()
-
     setup context do
-      state = generate_state()
+      kinde_id = generate_kinde_id()
+
+      claims = %{
+        "sub" => kinde_id,
+        "given_name" => Faker.Person.first_name(),
+        "family_name" => Faker.Person.last_name(),
+        "email" => Faker.Internet.email(),
+        "picture" => Faker.Internet.url()
+      }
+
+      {:ok, id_token} = Kinde.TestJwksStrategy.sign(claims)
+
+      code = Faker.String.base64()
+      state = Faker.String.base64(44)
       extra_params = Map.get(context, :extra_params, %{})
 
       StateManagementAgent.put_state(state, %{
@@ -75,82 +75,60 @@ defmodule KindeTest do
         extra_params: extra_params
       })
 
-      %{state: state}
+      %{kinde_id: kinde_id, claims: claims, id_token: id_token, code: code, state: state}
     end
 
-    test "returns token properly", %{state: state} do
-      Req.Test.expect(Kinde, fn conn ->
-        {:ok, id_token} =
-          Kinde.TestJwksStrategy.sign(%{
-            "sub" => @kinde_id,
-            "given_name" => @given_name,
-            "family_name" => @family_name,
-            "email" => @email,
-            "picture" => @picture
-          })
-
-        Req.Test.json(conn, %{"id_token" => id_token})
+    test "returns token properly", %{
+      config: config,
+      code: code,
+      state: state,
+      id_token: id_token,
+      claims: claims
+    } do
+      expect(Kinde, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert %{"code" => ^code} = URI.decode_query(body)
+        json(conn, %{"id_token" => id_token})
       end)
 
-      assert {:ok, params, %{}} = Kinde.token(@config, @code, state)
+      assert {:ok, params, _extra_params} = Kinde.token(config, code, state)
 
-      assert params[:id]
-      assert params[:given_name] == @given_name
-      assert params[:family_name] == @family_name
-      assert params[:email] == @email
-      assert params[:picture] == @picture
+      assert params[:id] == Map.fetch!(claims, "sub")
+      assert params[:given_name] == Map.fetch!(claims, "given_name")
+      assert params[:family_name] == Map.fetch!(claims, "family_name")
+      assert params[:email] == Map.fetch!(claims, "email")
+      assert params[:picture] == Map.fetch!(claims, "picture")
     end
 
     @tag extra_params: %{"token-test" => true}
-    test "returns extra params properly", %{state: state, extra_params: extra_params} do
-      Req.Test.expect(Kinde, fn conn ->
-        {:ok, id_token} =
-          Kinde.TestJwksStrategy.sign(%{
-            "sub" => @kinde_id,
-            "given_name" => @given_name,
-            "family_name" => @family_name,
-            "email" => @email,
-            "picture" => @picture
-          })
+    test "returns extra params properly", %{
+      config: config,
+      code: code,
+      state: state,
+      id_token: id_token,
+      extra_params: extra_params
+    } do
+      expect(Kinde, &json(&1, %{"id_token" => id_token}))
 
-        Req.Test.json(conn, %{"id_token" => id_token})
-      end)
-
-      assert {:ok, _params, ^extra_params} = Kinde.token(@config, @code, state)
+      assert {:ok, _params, ^extra_params} = Kinde.token(config, code, state)
     end
 
-    test "returns error no_token when request for token fails", %{state: state} do
-      Req.Test.expect(Kinde, &Plug.Conn.send_resp(&1, 500, "internal server error"))
-
-      log =
-        capture_log(fn ->
-          assert {:error, :no_token} = Kinde.token(@config, @code, state)
-        end)
-
+    test "returns error no_token when request for token fails", %{
+      config: config,
+      code: code,
+      state: state
+    } do
+      expect(Kinde, &send_resp(&1, 500, "internal server error"))
+      {result, log} = with_log(fn -> Kinde.token(config, code, state) end)
+      assert {:error, :no_token} = result
       assert log =~ "Couldn't request token: 500"
     end
 
-    test "returns error if missing config attribute", %{state: state} do
-      code = Faker.String.base64()
-      config = Map.delete(@config, :prompt)
-
-      for {key, _value} <- config do
-        invalid_config = Map.delete(config, key)
-
-        assert {:error, :missing_config_key} = Kinde.token(invalid_config, code, state)
-      end
-    end
-
-    defp generate_state do
-      32
-      |> :crypto.strong_rand_bytes()
-      |> Base.url_encode64()
-    end
-
-    defp generate_verifier do
-      64
-      |> :crypto.strong_rand_bytes()
-      |> Base.encode16(case: :lower)
+    test "returns error if missing config attribute", %{config: config, code: code, state: state} do
+      assert {:error, :missing_config_key} =
+               config
+               |> Map.delete(:client_id)
+               |> Kinde.token(code, state)
     end
   end
 end
