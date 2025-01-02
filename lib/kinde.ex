@@ -1,6 +1,6 @@
 defmodule Kinde do
   @moduledoc """
-  Module that supports OAuth2 for Kinde
+  Supports OpenID Connect with PKCE
   """
 
   alias Kinde.IdToken
@@ -25,6 +25,8 @@ defmodule Kinde do
   @config_keys ~w[domain client_id client_secret redirect_uri]a
 
   @state_management Application.compile_env(:kinde, :state_management, Kinde.StateManagementAgent)
+
+  @finch_name Kinde.Finch
 
   @doc """
   Generates the OAuth2 redirect url
@@ -53,17 +55,7 @@ defmodule Kinde do
       |> Map.get(:scopes, @scopes)
       |> Enum.join(" ")
 
-    qs =
-      config
-      |> Map.take(~w[client_id redirect_uri prompt]a)
-      |> Map.put_new(:prompt, "login")
-      |> Map.put(:response_type, :code)
-      |> Map.put(:scope, scope)
-      |> Map.put(:state, state)
-      |> Map.put(:code_challenge, challenge)
-      |> Map.put(:code_challenge_method, "S256")
-      |> URI.encode_query()
-
+    qs = build_query_string(config, scope, state, challenge)
     {:ok, "#{domain}/oauth2/auth?#{qs}"}
   end
 
@@ -111,9 +103,14 @@ defmodule Kinde do
   end
 
   defp token_request(base_url, params) do
-    options = Keyword.merge([form: params], Application.get_env(:kinde, __MODULE__, []))
+    opts =
+      :kinde
+      |> Application.get_env(__MODULE__, [])
+      |> Keyword.put(:base_url, base_url)
+      |> Keyword.put(:form, params)
+      |> Keyword.put(:finch, @finch_name)
 
-    Req.post("#{base_url}/oauth2/token", options)
+    Req.post("/oauth2/token", opts)
   end
 
   defp token_response(%Req.Response{status: 200, body: body}) do
@@ -164,6 +161,18 @@ defmodule Kinde do
     with :ok <- @state_management.put_state(state, params) do
       {:ok, state}
     end
+  end
+
+  defp build_query_string(config, scope, state, challenge) do
+    config
+    |> Map.take(~w[client_id redirect_uri prompt]a)
+    |> Map.put_new(:prompt, "login")
+    |> Map.put(:response_type, :code)
+    |> Map.put(:scope, scope)
+    |> Map.put(:state, state)
+    |> Map.put(:code_challenge, challenge)
+    |> Map.put(:code_challenge_method, "S256")
+    |> URI.encode_query()
   end
 
   defp take_state(state), do: @state_management.take_state(state)
