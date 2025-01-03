@@ -10,36 +10,21 @@ defmodule Kinde.Application do
     children =
       [
         {Finch, name: Kinde.Finch},
-        Kinde.StateManagementAgent
-      ] ++ token_strategy() ++ management_api()
+        Kinde.StateManagementAgent,
+        Kinde.TokenStrategy,
+        {Kinde.ManagementAPI, management_api()}
+      ]
 
     opts = [strategy: :one_for_one, name: Kinde.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
-  defp token_strategy do
-    if Application.get_env(:kinde, :token_strategy, false) do
-      [Kinde.TokenStrategy]
-    else
-      []
-    end
-  end
-
   defp management_api do
-    if Application.get_env(:kinde, :management_api, false) do
-      [{Kinde.ManagementApi, management_api_opts()}]
-    else
-      []
-    end
-  end
+    opts = Application.get_env(:kinde, Kinde.ManagementAPI, [])
 
-  defp management_api_opts,
-    do: Enum.reduce(~w[business_domain client_id client_secret]a, [], &put_config/2)
-
-  defp put_config(key, opts) do
-    case Application.fetch_env(:kinde, key) do
-      {:ok, value} ->
-        Keyword.put(opts, key, value)
+    case Application.fetch_env(:kinde, :domain) do
+      {:ok, domain} ->
+        Keyword.put_new(opts, :business_domain, domain)
 
       :error ->
         opts

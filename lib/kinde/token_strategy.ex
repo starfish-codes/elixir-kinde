@@ -10,20 +10,28 @@ defmodule Kinde.TokenStrategy do
   @spec init_opts(opts :: Keyword.t()) :: Keyword.t()
   def init_opts(opts) do
     opts
-    |> put_jwks_url()
+    |> maybe_put_jwks_url()
     |> Keyword.put_new(:explicit_alg, "RS256")
   end
 
-  defp put_jwks_url(opts) do
+  defp maybe_put_jwks_url(opts) do
     if Keyword.has_key?(opts, :jwks_url) do
       opts
     else
-      Keyword.put(opts, :jwks_url, build_jwks_url())
+      put_jwks_url(opts)
     end
   end
 
-  defp build_jwks_url do
-    business_domain = Application.fetch_env!(:kinde, :business_domain)
-    "https://#{business_domain}/.well-known/jwks"
+  defp put_jwks_url(opts) do
+    case Application.fetch_env(:kinde, :domain) do
+      {:ok, domain} ->
+        Keyword.put(opts, :jwks_url, "https://#{domain}/.well-known/jwks")
+
+      :error ->
+        opts
+        |> Keyword.put(:jwks_url, true)
+        |> Keyword.put(:first_fetch_sync, false)
+        |> Keyword.put(:should_start, false)
+    end
   end
 end

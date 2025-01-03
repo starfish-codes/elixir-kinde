@@ -4,6 +4,7 @@ defmodule Kinde do
   """
 
   alias Kinde.IdToken
+  alias Kinde.StateManagement
 
   require Logger
 
@@ -24,8 +25,6 @@ defmodule Kinde do
   @scopes ~w[openid profile email offline]
   @config_keys ~w[domain client_id client_secret redirect_uri]a
 
-  @state_management Application.compile_env(:kinde, :state_management, Kinde.StateManagementAgent)
-
   @finch_name Kinde.Finch
 
   @doc """
@@ -42,6 +41,8 @@ defmodule Kinde do
   """
   @spec auth(config(), map()) :: {:ok, String.t()} | {:error, term()}
   def auth(config, extra_params \\ %{}) do
+    config = load_config_from_app_env(config)
+
     with :ok <- check_config(config),
          {verifier, challenge} = pkce(),
          {:ok, state} <- create_state(verifier, extra_params) do
@@ -158,7 +159,7 @@ defmodule Kinde do
     state = generate_state()
     params = %{code_verifier: verifier, extra_params: extra_params}
 
-    with :ok <- @state_management.put_state(state, params) do
+    with :ok <- StateManagement.put_state(state, params) do
       {:ok, state}
     end
   end
@@ -175,11 +176,20 @@ defmodule Kinde do
     |> URI.encode_query()
   end
 
-  defp take_state(state), do: @state_management.take_state(state)
+  defp take_state(state), do: StateManagement.take_state(state)
 
   defp check_config(config) do
     @config_keys
     |> Enum.all?(fn key -> Map.has_key?(config, key) end)
     |> if(do: :ok, else: {:error, :missing_config_key})
+  end
+
+  defp load_config_from_app_env(config) do
+    Enum.reduce(@config_keys, config, fn key, acc ->
+      case Application.fetch_env(:kinde, key) do
+        {:ok, value} -> Map.put_new(acc, key, value)
+        :error -> acc
+      end
+    end)
   end
 end
