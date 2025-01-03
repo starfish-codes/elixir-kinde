@@ -8,6 +8,7 @@ defmodule KindeTest do
 
   alias Kinde
   alias Kinde.StateManagementAgent
+  alias Kinde.Test.TokenStrategy
 
   @moduletag :set_req_test_from_context
 
@@ -64,7 +65,7 @@ defmodule KindeTest do
         "picture" => Faker.Internet.url()
       }
 
-      {:ok, id_token} = Kinde.TestJwksStrategy.sign(claims)
+      {:ok, id_token} = TokenStrategy.sign(claims)
 
       code = Faker.String.base64()
       state = Faker.String.base64(44)

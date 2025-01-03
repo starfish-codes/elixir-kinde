@@ -1,6 +1,6 @@
 import Config
 
-config :joken_jwks, strategy: Kinde.TestJwksStrategy
+config :kinde, Kinde.Token, test_strategy: true
 
 config :kinde, Kinde,
   plug: {Req.Test, Kinde},

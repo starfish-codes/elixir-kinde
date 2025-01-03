@@ -3,7 +3,7 @@ defmodule Kinde do
   Supports OpenID Connect with PKCE
   """
 
-  alias Kinde.IdToken
+  alias Kinde.Token
   alias Kinde.StateManagement
 
   require Logger
@@ -117,7 +117,7 @@ defmodule Kinde do
   defp token_response(%Req.Response{status: 200, body: body}) do
     body
     |> Map.fetch!("id_token")
-    |> IdToken.verify_and_validate()
+    |> Token.verify_and_validate()
   end
 
   defp token_response(%Req.Response{status: status}) do
