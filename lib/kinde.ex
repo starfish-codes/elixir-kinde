@@ -19,7 +19,7 @@ defmodule Kinde do
 
   @type state_params :: %{
           code_verifier: String.t(),
-          extra_params: String.t()
+          extra_params: map()
         }
 
   @scopes ~w[openid profile email offline]
