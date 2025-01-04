@@ -9,10 +9,10 @@ defmodule Kinde do
   require Logger
 
   @type config :: %{
-          required(:domain) => String.t(),
-          required(:client_id) => String.t(),
-          required(:client_secret) => String.t(),
-          required(:redirect_uri) => String.t(),
+          optional(:domain) => String.t(),
+          optional(:client_id) => String.t(),
+          optional(:client_secret) => String.t(),
+          optional(:redirect_uri) => String.t(),
           optional(:prompt) => String.t(),
           optional(:scopes) => [String.t()]
         }
