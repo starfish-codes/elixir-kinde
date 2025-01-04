@@ -68,12 +68,13 @@ defmodule Kinde do
       iex> token(%{client_id: "value"}, "base64code", "state_hash")
       {:ok, %{given_name: "John"}, %{extra_params: "additional data"}}
 
-     iex> auth(%{client_id: "value", client_secret: "value", redirect_uri: "value"})
+      iex> auth(%{client_id: "value", client_secret: "value", redirect_uri: "value"})
       {:error, :missing_config_key}
-
   """
   @spec token(config(), String.t(), map()) :: {:ok, map(), map()} | {:error, term()}
-  def token(config, code, state) when is_binary(state) do
+  def token(config \\ %{}, code, state) when is_binary(state) do
+    config = load_config_from_app_env(config)
+
     with :ok <- check_config(config),
          {:ok, params} <- take_state(state) do
       fetch_token(config, code, params)
