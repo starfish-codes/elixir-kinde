@@ -57,7 +57,13 @@ defmodule Kinde do
       |> Enum.join(" ")
 
     qs = build_query_string(config, scope, state, challenge)
-    {:ok, "#{domain}/oauth2/auth?#{qs}"}
+
+    {:ok,
+     domain
+     |> Kinde.URL.parse()
+     |> URI.append_path("/oauth2/auth")
+     |> URI.append_query(qs)
+     |> to_string()}
   end
 
   @doc """
@@ -108,7 +114,7 @@ defmodule Kinde do
     opts =
       :kinde
       |> Application.get_env(__MODULE__, [])
-      |> Keyword.put(:base_url, base_url)
+      |> Keyword.put(:base_url, Kinde.URL.parse_to_string(base_url))
       |> Keyword.put(:form, params)
       |> Keyword.put(:finch, @finch_name)
 

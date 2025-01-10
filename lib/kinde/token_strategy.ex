@@ -25,7 +25,11 @@ defmodule Kinde.TokenStrategy do
   defp put_jwks_url(opts) do
     case Application.fetch_env(:kinde, :domain) do
       {:ok, domain} ->
-        Keyword.put(opts, :jwks_url, "#{domain}/.well-known/jwks")
+        domain
+        |> Kinde.URL.parse()
+        |> URI.append_path("/.well-known/jwks")
+        |> URI.to_string()
+        |> then(fn url -> Keyword.put(opts, :jwks_url, url) end)
 
       :error ->
         opts
