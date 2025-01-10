@@ -1,14 +1,34 @@
 defmodule Kinde.URL do
   @moduledoc """
-    Parsing function that helps to make a fully qualified url. Using elixir's URI module.
+  Provides URL helpers
   """
 
-  @spec parse(String.t() | URI.t()) :: URI.t()
-  def parse(url) when is_binary(url), do: parse(URI.parse(url))
-  def parse(url = %URI{scheme: nil}), do: parse("https://#{to_string(url)}")
-  def parse(url = %URI{path: nil}), do: parse("#{to_string(url)}/")
-  def parse(url), do: url
+  @spec base_url(String.t()) :: String.t()
+  def base_url(domain) do
+    domain
+    |> parse()
+    |> URI.to_string()
+  end
 
-  @spec parse_to_string(URI.t() | String.t()) :: String.t()
-  def parse_to_string(url), do: url |> parse() |> to_string()
+  @spec auth_url(String.t(), String.t()) :: String.t()
+  def auth_url(domain, query_string) do
+    domain
+    |> parse()
+    |> URI.append_path("/oauth2/auth")
+    |> URI.append_query(query_string)
+    |> URI.to_string()
+  end
+
+  @spec jwks_url(String.t()) :: String.t()
+  def jwks_url(domain) do
+    domain
+    |> parse()
+    |> URI.append_path("/.well-known/jwks")
+    |> URI.to_string()
+  end
+
+  defp parse(url) when is_binary(url), do: parse(URI.parse(url))
+  defp parse(url = %URI{scheme: nil}), do: parse("https://#{to_string(url)}")
+  defp parse(url = %URI{path: nil}), do: parse("#{to_string(url)}/")
+  defp parse(url), do: url
 end

@@ -7,6 +7,8 @@ defmodule Kinde.TokenStrategy do
 
   use JokenJwks.DefaultStrategyTemplate
 
+  alias Kinde.URL
+
   @spec init_opts(opts :: Keyword.t()) :: Keyword.t()
   def init_opts(opts) do
     opts
@@ -25,11 +27,7 @@ defmodule Kinde.TokenStrategy do
   defp put_jwks_url(opts) do
     case Application.fetch_env(:kinde, :domain) do
       {:ok, domain} ->
-        domain
-        |> Kinde.URL.parse()
-        |> URI.append_path("/.well-known/jwks")
-        |> URI.to_string()
-        |> then(fn url -> Keyword.put(opts, :jwks_url, url) end)
+        Keyword.put(opts, :jwks_url, URL.jwks_url(domain))
 
       :error ->
         opts

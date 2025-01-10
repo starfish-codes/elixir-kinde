@@ -1,36 +1,18 @@
-defmodule Kinde.URLTests do
+defmodule Kinde.URLTest do
   use ExUnit.Case
   alias Kinde.URL
 
-  describe "parse/1" do
-    test "parses a string into a URI struct" do
-      assert %URI{scheme: "https", host: "example.com", path: "/"} =
-               URL.parse("https://example.com")
-    end
-
-    test "parse a url without scheme into a URI struct" do
-      assert %URI{scheme: "https", host: "example.com", path: "/"} = URL.parse("example.com")
-    end
-
-    test "parse a url without path into a URI struct" do
-      assert %URI{scheme: "https", host: "example.com", path: "/"} =
-               URL.parse("https://example.com")
-    end
-
-    test "returns the URI struct if it is already a URI struct" do
-      uri = %URI{scheme: "https", host: "example.com", path: "/"}
-      assert uri == URL.parse(uri)
+  describe "auth_url/2" do
+    test "can handle domain both with and without scheme" do
+      assert "https://example.com/oauth2/auth?x=1" = URL.auth_url("https://example.com", "x=1")
+      assert "https://example.com/oauth2/auth?x=1" = URL.auth_url("example.com", "x=1")
     end
   end
 
-  describe "parse_to_string/1" do
-    test "parses a URI struct into a string" do
-      uri = URI.parse("example.com")
-      assert "https://example.com/" == URL.parse_to_string(uri)
-    end
-
-    test "parses a url without scheme into a full url" do
-      assert "https://example.com/" == URL.parse_to_string("example.com")
+  describe "jwks_url/1" do
+    test "can handle domain both with and without scheme" do
+      assert "https://example.com/.well-known/jwks" = URL.jwks_url("https://example.com")
+      assert "https://example.com/.well-known/jwks" = URL.jwks_url("example.com")
     end
   end
 end
