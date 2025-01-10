@@ -3,8 +3,7 @@ defmodule Kinde do
   Supports OpenID Connect with PKCE
   """
 
-  alias Kinde.Token
-  alias Kinde.StateManagement
+  alias Kinde.{StateManagement, Token, URL}
 
   require Logger
 
@@ -57,7 +56,8 @@ defmodule Kinde do
       |> Enum.join(" ")
 
     qs = build_query_string(config, scope, state, challenge)
-    {:ok, "#{domain}/oauth2/auth?#{qs}"}
+
+    {:ok, URL.auth_url(domain, qs)}
   end
 
   @doc """
@@ -104,11 +104,11 @@ defmodule Kinde do
     end
   end
 
-  defp token_request(base_url, params) do
+  defp token_request(domain, params) do
     opts =
       :kinde
       |> Application.get_env(__MODULE__, [])
-      |> Keyword.put(:base_url, base_url)
+      |> Keyword.put(:base_url, URL.base_url(domain))
       |> Keyword.put(:form, params)
       |> Keyword.put(:finch, @finch_name)
 
