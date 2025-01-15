@@ -201,7 +201,7 @@ defmodule Kinde.ManagementAPI do
 
   defp build_request(business_domain, opts) do
     :kinde
-    |> Application.get_env(__MODULE__, [])
+    |> Application.get_env(Kinde, [])
     |> Keyword.merge(
       finch: @finch_name,
       base_url: business_domain

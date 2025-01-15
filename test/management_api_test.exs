@@ -10,15 +10,15 @@ defmodule Kinde.ManagementAPITest do
   alias Kinde.TestClients.{
     ClientAuthenticationFailed,
     GetUserError,
-    GetUserSuccess,
     InternalServerError,
     ListUsersError,
-    ListUsersSuccess,
     RenewTokenSuccess
   }
 
   @moduletag :capture_log
   setup do
+    stub(Kinde, Kinde.Test.SuccessClient)
+
     %{
       opts: [
         business_domain: Faker.Internet.url(),
@@ -31,8 +31,6 @@ defmodule Kinde.ManagementAPITest do
 
   describe "get_user/2" do
     test "success", %{opts: opts} do
-      stub(ManagementAPI, GetUserSuccess)
-
       {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
       user_id = generate_kinde_id()
@@ -46,7 +44,7 @@ defmodule Kinde.ManagementAPITest do
     end
 
     test "error", %{opts: opts} do
-      stub(ManagementAPI, GetUserError)
+      stub(Kinde, GetUserError)
 
       {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
@@ -60,8 +58,6 @@ defmodule Kinde.ManagementAPITest do
 
   describe "list_users/1" do
     test "success", %{opts: opts} do
-      stub(ManagementAPI, ListUsersSuccess)
-
       {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
       assert {:ok, users} = ManagementAPI.list_users(pid)
@@ -69,7 +65,7 @@ defmodule Kinde.ManagementAPITest do
     end
 
     test "error", %{opts: opts} do
-      stub(ManagementAPI, ListUsersError)
+      stub(Kinde, ListUsersError)
 
       {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
@@ -82,8 +78,6 @@ defmodule Kinde.ManagementAPITest do
 
   describe "renew_token" do
     setup %{opts: opts} do
-      stub(ManagementAPI, RenewTokenSuccess)
-
       {:ok, pid} = GenServer.start_link(ManagementAPI, opts)
 
       %{pid: pid}
@@ -91,7 +85,7 @@ defmodule Kinde.ManagementAPITest do
 
     test "success", %{pid: pid} do
       stub(
-        ManagementAPI,
+        Kinde,
         {RenewTokenSuccess, [access_token: "new-access-token", expires_in: 86_399]}
       )
 
@@ -110,7 +104,7 @@ defmodule Kinde.ManagementAPITest do
     test "error", %{pid: pid} do
       %{access_token: prev_access_token} = :sys.get_state(pid)
 
-      stub(ManagementAPI, ClientAuthenticationFailed)
+      stub(Kinde, ClientAuthenticationFailed)
 
       log =
         capture_log(fn ->
@@ -130,7 +124,7 @@ defmodule Kinde.ManagementAPITest do
     test "unknow error", %{pid: pid} do
       %{access_token: prev_access_token} = :sys.get_state(pid)
 
-      stub(ManagementAPI, InternalServerError)
+      stub(Kinde, InternalServerError)
 
       log =
         capture_log(fn ->

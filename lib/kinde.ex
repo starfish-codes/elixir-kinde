@@ -13,7 +13,8 @@ defmodule Kinde do
           optional(:client_secret) => String.t(),
           optional(:redirect_uri) => String.t(),
           optional(:prompt) => String.t(),
-          optional(:scopes) => [String.t()]
+          optional(:scopes) => [String.t()],
+          optional(:test?) => boolean()
         }
 
   @type state_params :: %{
@@ -98,21 +99,28 @@ defmodule Kinde do
       code_verifier: code_verifier
     }
 
-    with {:ok, response} <- token_request(domain, params),
+    with {:ok, response} <- token_request(domain, params, Map.get(config, :test?, false)),
          {:ok, claims} <- token_response(response) do
       {:ok, user_params(claims), extra_params}
     end
   end
 
-  defp token_request(domain, params) do
-    opts =
+  defp token_request(domain, params, test?) do
+    req_opts =
       :kinde
       |> Application.get_env(__MODULE__, [])
       |> Keyword.put(:base_url, URL.base_url(domain))
       |> Keyword.put(:form, params)
       |> Keyword.put(:finch, @finch_name)
+      |> then(fn opts ->
+        if test? do
+          opts ++ test_mode_opts()
+        else
+          opts
+        end
+      end)
 
-    Req.post("/oauth2/token", opts)
+    Req.post("/oauth2/token", req_opts)
   end
 
   defp token_response(%Req.Response{status: 200, body: body}) do
@@ -192,5 +200,12 @@ defmodule Kinde do
         :error -> acc
       end
     end)
+  end
+
+  defp test_mode_opts do
+    [
+      plug: {Req.Test, __MODULE__},
+      retry: false,
+    ]
   end
 end

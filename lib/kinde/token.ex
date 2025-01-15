@@ -1,13 +1,23 @@
 defmodule Kinde.Token do
   @moduledoc false
-  use Joken.Config
+  def token_config, do: Joken.Config.default_claims(skip: ~w[aud iss]a)
 
-  if Application.compile_env(:kinde, [__MODULE__, :test_strategy], false) do
-    add_hook(JokenJwks, strategy: Kinde.Test.TokenStrategy)
-  else
-    add_hook(JokenJwks, strategy: Kinde.TokenStrategy)
+  def verify_and_validate(bearer_token, key \\ :default_signer, context \\ nil) do
+    config = Application.get_env(:kinde, Kinde.Token, %{test_strategy: false})
+
+    strategy =
+      if config[:test_strategy],
+        do: Kinde.Test.TokenStrategy,
+        else: Kinde.TokenStrategy
+
+    Joken.verify_and_validate(
+      token_config(),
+      bearer_token,
+      Joken.Signer.parse_config(key),
+      context,
+      [
+        {JokenJwks, strategy: strategy}
+      ]
+    )
   end
-
-  @impl Joken.Config
-  def token_config, do: default_claims(skip: ~w[aud iss]a)
 end

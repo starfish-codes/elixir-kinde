@@ -30,7 +30,7 @@ defmodule Kinde.MixProject do
       {:finch, "~> 0.19.0"},
       {:joken_jwks, "~> 1.6"},
       {:req, "~> 0.5.8"},
-      {:plug, "~> 1.16", only: [:test]},
+      {:plug, "~> 1.16"},
       {:faker, "~> 0.18.0", only: [:test]}
     ]
   end

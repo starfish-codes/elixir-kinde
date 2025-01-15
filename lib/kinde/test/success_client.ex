@@ -1,21 +1,47 @@
-defmodule Kinde.TestClients.ListUsersSuccess do
+defmodule Kinde.Test.SuccessClient do
   @moduledoc false
 
   @behaviour Plug
 
-  import Kinde.TestHelpers
+  import Kinde.Test.Generators
   import Req.Test
-
-  alias Kinde.TestClients.RenewTokenSuccess
   alias Plug.Conn
+
+  @default_access_token "test-access-token"
 
   @impl Plug
   def init(opts), do: opts
 
   @impl Plug
-  def call(%Conn{request_path: "/oauth2/token"} = conn, opts),
-    do: RenewTokenSuccess.call(conn, opts)
+  def call(%Conn{request_path: "/oauth2/token"} = conn, opts) do
+    access_token = Keyword.get(opts, :access_token, @default_access_token)
+    expires_in = Keyword.get(opts, :expires_in, 86_399)
 
+    claims = %{
+      "sub" => generate_kinde_id(),
+      "given_name" => generate_first_name(),
+      "family_name" => generate_last_name(),
+      "email" => generate_email(),
+      "picture" => "https://example.com/picture.jpg"
+    }
+
+    {:ok, id_token} = Kinde.Test.TokenStrategy.sign(claims)
+
+    json(conn, %{
+      access_token: access_token,
+      expires_in: expires_in,
+      id_token: id_token,
+      scope: "openid profile email offline",
+      refresh_token: "",
+      token_type: "bearer"
+    })
+  end
+
+  # Get user
+  def call(%Conn{request_path: "/api/v1/user", query_params: %{"id" => id}} = conn, _opts),
+    do: json(conn, generate_user(id))
+
+  # list users
   def call(%Conn{request_path: "/api/v1/users", query_params: query_params} = conn, opts) do
     next_token = Map.get(query_params, "next_token")
     per_page = Keyword.get(opts, :per_page, 10)
@@ -46,11 +72,6 @@ defmodule Kinde.TestClients.ListUsersSuccess do
       _gt_or_eq_than_per_page -> per_page
     end
   end
-
-  defp generate_users(users_count) when users_count > 0,
-    do: Enum.map(1..users_count, fn _index -> generate_user() end)
-
-  defp generate_users(_users_count), do: nil
 
   defp next_token(count, total) when count < total do
     %{count: count}
