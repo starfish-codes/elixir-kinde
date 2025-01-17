@@ -21,10 +21,11 @@ defmodule Kinde.ManagementAPITest do
 
     %{
       opts: [
-        business_domain: Faker.Internet.url(),
+        domain: Faker.Internet.url(),
         client_id: "KINDE-TEST-CLIENT-ID",
         client_secret: "KINDE-TEST-CLIENT-SECRET",
-        owner: self()
+        owner: self(),
+        test?: true
       ]
     }
   end

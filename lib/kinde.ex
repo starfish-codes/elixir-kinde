@@ -23,7 +23,7 @@ defmodule Kinde do
         }
 
   @scopes ~w[openid profile email offline]
-  @config_keys ~w[domain client_id client_secret redirect_uri]a
+  @config_keys ~w[domain client_id client_secret redirect_uri test?]a
 
   @finch_name Kinde.Finch
 
@@ -205,7 +205,7 @@ defmodule Kinde do
   defp test_mode_opts do
     [
       plug: {Req.Test, __MODULE__},
-      retry: false,
+      retry: false
     ]
   end
 end

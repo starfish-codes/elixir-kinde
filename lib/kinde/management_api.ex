@@ -13,6 +13,8 @@ defmodule Kinde.ManagementAPI do
 
   @retry_timeout :timer.minutes(5)
 
+  @config_keys ~w[domain client_id client_secret test?]a
+
   @doc """
   Returns a registered user on Kinde
 
@@ -100,7 +102,11 @@ defmodule Kinde.ManagementAPI do
 
   @impl GenServer
   def init(opts) do
-    case required_configuration(opts) do
+    opts
+    |> merge_opts_with_app_env()
+    |> required_configuration()
+    |> dbg
+    |> case do
       {:ok, config} ->
         {:ok, Map.put(config, :opts, opts), {:continue, :postinit}}
 
@@ -116,19 +122,19 @@ defmodule Kinde.ManagementAPI do
   def handle_call(
         :build_request,
         _from,
-        %{access_token: access_token, business_domain: business_domain, opts: opts} = state
+        %{access_token: access_token, domain: domain, opts: opts} = state
       ),
-      do: {:reply, build_api_request(business_domain, access_token, opts), state}
+      do: {:reply, build_api_request(domain, access_token, opts), state}
 
   @impl GenServer
   def handle_info(:renew_token, state), do: renew_token(state)
 
-  defp auth_payload(client_id, client_secret, business_domain) do
+  defp auth_payload(client_id, client_secret, domain) do
     %{
       grant_type: :client_credentials,
       client_id: client_id,
       client_secret: client_secret,
-      audience: "#{business_domain}/api"
+      audience: "#{domain}/api"
     }
   end
 
@@ -146,12 +152,12 @@ defmodule Kinde.ManagementAPI do
          %{
            client_id: client_id,
            client_secret: client_secret,
-           business_domain: business_domain,
+           domain: domain,
            opts: opts
          } = state
        ) do
-    payload = auth_payload(client_id, client_secret, business_domain)
-    request = build_oauth_request(business_domain, payload, opts)
+    payload = auth_payload(client_id, client_secret, domain)
+    request = build_oauth_request(domain, payload, opts)
 
     with {:ok, %Req.Response{status: status, body: body}} <- Req.request(request) do
       init_state(status, body, state)
@@ -187,39 +193,42 @@ defmodule Kinde.ManagementAPI do
   defp required_configuration(opts) do
     with {:ok, client_id} <- Keyword.fetch(opts, :client_id),
          {:ok, client_secret} <- Keyword.fetch(opts, :client_secret),
-         {:ok, business_domain} <- Keyword.fetch(opts, :business_domain) do
+         {:ok, domain} <- Keyword.fetch(opts, :domain) do
       {:ok,
        %{
          client_id: client_id,
          client_secret: client_secret,
-         business_domain: business_domain
+         domain: domain,
+         test?: Keyword.get(opts, :test?, false)
        }}
     end
   end
 
   defp schedule_renew_token(timeout), do: Process.send_after(self(), :renew_token, timeout)
 
-  defp build_request(business_domain, opts) do
+  defp build_request(domain, opts) do
     :kinde
-    |> Application.get_env(Kinde, [])
-    |> Keyword.merge(
-      finch: @finch_name,
-      base_url: business_domain
-    )
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.put(:base_url, URL.base_url(domain))
+    |> Keyword.put(:finch, @finch_name)
+    |> then(fn req_opts ->
+      if Keyword.get(opts, :test?, false), do: req_opts ++ test_mode_opts(), else: req_opts
+    end)
+    |> dbg
     |> Req.new()
     |> Req.Request.register_options([:owner])
     |> Req.Request.merge_options(Keyword.take(opts, [:owner]))
     |> Req.Request.prepend_request_steps(allow_ownership: &allow_ownership/1)
   end
 
-  defp build_oauth_request(business_domain, payload, opts) do
-    business_domain
+  defp build_oauth_request(domain, payload, opts) do
+    domain
     |> build_request(opts)
     |> Req.merge(form: payload, url: "/oauth2/token", method: :post)
   end
 
-  defp build_api_request(business_domain, access_token, opts) do
-    business_domain
+  defp build_api_request(domain, access_token, opts) do
+    domain
     |> build_request(opts)
     |> Req.merge(auth: {:bearer, access_token})
     |> Req.Request.put_header("accept", "application/json")
@@ -230,6 +239,24 @@ defmodule Kinde.ManagementAPI do
       with {Req.Test, mock} <- Req.Request.get_option(req, :plug),
            owner when is_pid(owner) <- Req.Request.get_option(req, :owner) do
         Req.Test.allow(mock, owner, self())
+      end
+    end)
+  end
+
+  defp test_mode_opts do
+    [
+      plug: {Req.Test, __MODULE__},
+      retry: false
+    ]
+  end
+
+  defp merge_opts_with_app_env(opts) do
+    Enum.reduce(@config_keys, opts, fn key, acc ->
+      dbg(key)
+
+      case Application.fetch_env(:kinde, key) |> dbg do
+        {:ok, value} -> Map.put_new(acc, key, value)
+        :error -> acc
       end
     end)
   end

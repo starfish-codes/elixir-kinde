@@ -16,6 +16,6 @@ defmodule Kinde.Test do
   end
 
   def stub_with_success() do
-    stub(Kinde, Kinde.Test.SuccessClient)
+    Req.Test.stub(Kinde, Kinde.Test.SuccessClient)
   end
 end
