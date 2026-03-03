@@ -1,11 +1,26 @@
 defmodule Kinde.ManagementAPI do
   @moduledoc """
-  Maintains access token for the Management API
+  Client for the [Kinde Management API](https://docs.kinde.com/kinde-apis/management/).
 
-  See https://docs.kinde.com/kinde-apis/management/
+  Starts as a GenServer under the application supervisor and automatically
+  obtains and renews an access token using the client credentials flow.
+
+  ## Configuration
+
+      config :kinde, :management_api,
+        client_id: "management_client_id",
+        client_secret: "management_client_secret",
+        business_domain: "https://yourapp.kinde.com"  # defaults to :domain
+
+  If `:business_domain` is not set, the top-level `:domain` config value is used.
+
+  The server returns `:ignore` on startup when required keys are missing, so the
+  application can still boot without Management API credentials.
   """
 
   use GenServer
+
+  alias Kinde.{APIError, NoAccessTokenError, ObtainingTokenError}
 
   require Logger
 
@@ -14,95 +29,103 @@ defmodule Kinde.ManagementAPI do
   @retry_timeout :timer.minutes(5)
 
   @doc """
-  Returns a registered user on Kinde
+  Fetches a user by their Kinde ID.
+
+  Returns `{:ok, user_map}` on success, `{:error, %APIError{}}` on API errors,
+  or `{:error, %NoAccessTokenError{}}` if the access token hasn't been obtained yet.
 
   ## Examples
 
-      iex> get_user("kid1223")
-      {:ok, %{"first_name" => "Mary", "last_name" => "Doe"}}
+      iex> Kinde.ManagementAPI.get_user("kp_abc123def456")
+      {:ok, %{"first_name" => "Mary", "last_name" => "Doe", ...}}
 
   """
   @spec get_user(String.t(), GenServer.server()) :: {:ok, map()} | {:error, term()}
   def get_user(kinde_id, server \\ __MODULE__) do
-    request = request(server)
-
-    with {:ok, response} <- Req.request(request, url: "/api/v1/user?id=#{kinde_id}") do
+    with {:ok, request} <- GenServer.call(server, :build_request),
+         {:ok, response} <- Req.request(request, url: "/api/v1/user", params: [id: kinde_id]) do
       %Req.Response{status: status, body: body} = response
       handle_response(status, body)
     end
   end
 
   @doc """
-  Returns a list of users registered on Kinde
+  Fetches all users, handling pagination automatically.
+
+  Returns `{:ok, [user_map]}` with a flat list of all users across all pages.
 
   ## Examples
 
-      iex> list_users()
-      {:ok, %{"users" => [%{name: "John"}], "next_token" => "Mjc6OjpuYW1lX2FzYw=="}}
+      iex> Kinde.ManagementAPI.list_users()
+      {:ok, [%{"first_name" => "John", ...}, %{"first_name" => "Jane", ...}]}
 
   """
   @spec list_users(GenServer.server()) :: {:ok, [map()]} | {:error, term()}
-  def list_users(server \\ __MODULE__),
-    do: list_users([], nil, server)
-
-  defp list_users(users, next_token, server) do
-    request = request(server)
-
-    with {:ok, response} <- Req.request(request, url: users_url(next_token)),
-         %Req.Response{status: status, body: body} = response,
-         {:ok, payload} <- handle_response(status, body) do
-      handle_users_response(payload, users, server)
+  def list_users(server \\ __MODULE__) do
+    with {:ok, request} <- GenServer.call(server, :build_request) do
+      list_users([], nil, request)
     end
   end
 
-  defp handle_users_response(%{"users" => nil, "next_token" => nil}, users, _server),
-    do: handle_users_list(users)
+  defp list_users(users, next_token, %Req.Request{} = request) do
+    params = build_params(next_token)
 
-  defp handle_users_response(%{"users" => batch, "next_token" => nil}, users, _server),
-    do: handle_users_list([batch | users])
+    with {:ok, response} <- Req.request(request, url: "/api/v1/users", params: params),
+         %Req.Response{status: status, body: body} = response,
+         {:ok, payload} <- handle_response(status, body) do
+      handle_users_response(payload, users, request)
+    end
+  end
 
-  defp handle_users_response(%{"users" => batch, "next_token" => next_token}, users, server),
-    do: list_users([batch | users], next_token, server)
+  defp build_params(nil) do
+    []
+  end
+
+  defp build_params(next_token) do
+    [next_token: next_token]
+  end
+
+  defp handle_users_response(%{"users" => batch, "next_token" => nil}, users, _server) do
+    handle_users_list([batch | users])
+  end
+
+  defp handle_users_response(%{"users" => batch, "next_token" => next_token}, users, server) do
+    list_users([batch | users], next_token, server)
+  end
 
   defp handle_users_list(nested_list) do
     nested_list
+    |> Enum.reject(&is_nil/1)
     |> Enum.reverse()
     |> List.flatten()
-    |> then(&{:ok, &1})
+    |> then(fn unnested_list -> {:ok, unnested_list} end)
   end
 
-  defp users_url(nil), do: "/api/v1/users"
-  defp users_url(next_token), do: "/api/v1/users?next_token=#{next_token}"
+  defp handle_response(200, body) do
+    {:ok, body}
+  end
 
-  defp request(server), do: GenServer.call(server, :build_request)
-
-  defp handle_response(200, body), do: {:ok, body}
-
-  defp handle_response(_status, %{"errors" => errors}) do
-    Enum.each(errors, fn
-      %{"code" => code, "message" => message} ->
-        Logger.error("Kinde Management API #{code} error: #{message}")
-
-      unexpected_error ->
-        Logger.error("Kinde Management API unexpected error: " <> inspect(unexpected_error))
-    end)
-
-    {:error, :kinde_api_error_response}
+  defp handle_response(status, %{"errors" => errors}) when is_list(errors) do
+    {:error, %APIError{status: status, errors: errors}}
   end
 
   defp handle_response(status, body) do
-    Logger.error("Unknown Kinde Management API #{status} error: " <> inspect(body))
-    {:error, :kinde_api_unknown_error}
+    {:error, %APIError{status: status, errors: [body]}}
   end
 
+  @doc false
   @spec start_link(Keyword.t()) :: GenServer.on_start()
-  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  def start_link(opts) do
+    {name, opts} = Keyword.pop(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
 
   @impl GenServer
   def init(opts) do
-    case required_configuration(opts) do
-      {:ok, config} ->
-        {:ok, Map.put(config, :opts, opts), {:continue, :postinit}}
+    case init_state(opts) do
+      {:ok, state} ->
+        send(self(), :renew)
+        {:ok, state}
 
       :error ->
         :ignore
@@ -110,30 +133,8 @@ defmodule Kinde.ManagementAPI do
   end
 
   @impl GenServer
-  def handle_continue(:postinit, state), do: renew_token(state)
-
-  @impl GenServer
-  def handle_call(
-        :build_request,
-        _from,
-        %{access_token: access_token, business_domain: business_domain, opts: opts} = state
-      ),
-      do: {:reply, build_api_request(business_domain, access_token, opts), state}
-
-  @impl GenServer
-  def handle_info(:renew_token, state), do: renew_token(state)
-
-  defp auth_payload(client_id, client_secret, business_domain) do
-    %{
-      grant_type: :client_credentials,
-      client_id: client_id,
-      client_secret: client_secret,
-      audience: "#{business_domain}/api"
-    }
-  end
-
-  defp renew_token(state) do
-    case init_state(state) do
+  def handle_info(:renew, state) do
+    case renew_state(state) do
       {:ok, new_state} ->
         {:noreply, new_state}
 
@@ -142,23 +143,49 @@ defmodule Kinde.ManagementAPI do
     end
   end
 
-  defp init_state(
-         %{
-           client_id: client_id,
-           client_secret: client_secret,
-           business_domain: business_domain,
-           opts: opts
-         } = state
-       ) do
-    payload = auth_payload(client_id, client_secret, business_domain)
-    request = build_oauth_request(business_domain, payload, opts)
+  @impl GenServer
+  def handle_call(:build_request, _from, %{access_token: nil} = state) do
+    {:reply, {:error, %NoAccessTokenError{}}, state}
+  end
 
-    with {:ok, %Req.Response{status: status, body: body}} <- Req.request(request) do
-      init_state(status, body, state)
+  def handle_call(:build_request, _from, state) do
+    %{access_token: access_token, business_domain: business_domain, req_opts: req_opts} = state
+    {:reply, {:ok, build_api_request(business_domain, access_token, req_opts)}, state}
+  end
+
+  defp init_state(opts) do
+    with {:ok, client_id} <- Keyword.fetch(opts, :client_id),
+         {:ok, client_secret} <- Keyword.fetch(opts, :client_secret),
+         {:ok, business_domain} <- Keyword.fetch(opts, :business_domain) do
+      {:ok,
+       %{
+         business_domain: business_domain,
+         client_secret: client_secret,
+         client_id: client_id,
+         req_opts: Keyword.get(opts, :req_opts, []),
+         renew_token_timer: nil,
+         access_token: nil
+       }}
     end
   end
 
-  defp init_state(200, %{"access_token" => access_token, "expires_in" => expires_in}, state) do
+  defp renew_state(state) do
+    %{
+      business_domain: business_domain,
+      client_secret: client_secret,
+      client_id: client_id,
+      req_opts: req_opts
+    } = state
+
+    payload = auth_payload(client_id, client_secret, business_domain)
+    request = build_oauth_request(business_domain, payload, req_opts)
+
+    with {:ok, %Req.Response{status: status, body: body}} <- Req.request(request) do
+      renew_token(status, body, state)
+    end
+  end
+
+  defp renew_token(200, %{"access_token" => access_token, "expires_in" => expires_in}, state) do
     Logger.info("Access token obtained successfully")
 
     renew_token_timer =
@@ -174,63 +201,41 @@ defmodule Kinde.ManagementAPI do
     {:ok, state}
   end
 
-  defp init_state(_status, %{"error" => error, "error_description" => description}, _state) do
-    Logger.error("Kinde error: #{description}")
+  defp renew_token(status, body, _state) do
+    error = %ObtainingTokenError{status: status, body: body}
+    Logger.error(Exception.message(error))
     {:error, error}
   end
 
-  defp init_state(status, body, _state) do
-    Logger.error("Unknown Kinde #{status} error: " <> inspect(body))
-    {:error, :unknown_kinde_error}
+  defp schedule_renew_token(timeout) do
+    Process.send_after(self(), :renew, timeout)
   end
 
-  defp required_configuration(opts) do
-    with {:ok, client_id} <- Keyword.fetch(opts, :client_id),
-         {:ok, client_secret} <- Keyword.fetch(opts, :client_secret),
-         {:ok, business_domain} <- Keyword.fetch(opts, :business_domain) do
-      {:ok,
-       %{
-         client_id: client_id,
-         client_secret: client_secret,
-         business_domain: business_domain
-       }}
-    end
+  defp auth_payload(client_id, client_secret, business_domain) do
+    %{
+      grant_type: :client_credentials,
+      client_id: client_id,
+      client_secret: client_secret,
+      audience: "#{business_domain}/api"
+    }
   end
 
-  defp schedule_renew_token(timeout), do: Process.send_after(self(), :renew_token, timeout)
-
-  defp build_request(business_domain, opts) do
-    :kinde
-    |> Application.get_env(__MODULE__, [])
-    |> Keyword.merge(
-      finch: @finch_name,
-      base_url: business_domain
-    )
+  defp build_request(business_domain, req_opts) do
+    req_opts
     |> Req.new()
-    |> Req.Request.register_options([:owner])
-    |> Req.Request.merge_options(Keyword.take(opts, [:owner]))
-    |> Req.Request.prepend_request_steps(allow_ownership: &allow_ownership/1)
+    |> Req.Request.merge_options(finch: @finch_name, base_url: business_domain)
   end
 
-  defp build_oauth_request(business_domain, payload, opts) do
+  defp build_oauth_request(business_domain, payload, req_opts) do
     business_domain
-    |> build_request(opts)
+    |> build_request(req_opts)
     |> Req.merge(form: payload, url: "/oauth2/token", method: :post)
   end
 
-  defp build_api_request(business_domain, access_token, opts) do
+  defp build_api_request(business_domain, access_token, req_opts) do
     business_domain
-    |> build_request(opts)
-    |> Req.merge(auth: {:bearer, access_token})
+    |> build_request(req_opts)
     |> Req.Request.put_header("accept", "application/json")
-  end
-
-  defp allow_ownership(request) do
-    tap(request, fn req ->
-      with {Req.Test, mock} <- Req.Request.get_option(req, :plug),
-           owner when is_pid(owner) <- Req.Request.get_option(req, :owner) do
-        Req.Test.allow(mock, owner, self())
-      end
-    end)
+    |> Req.merge(auth: {:bearer, access_token})
   end
 end

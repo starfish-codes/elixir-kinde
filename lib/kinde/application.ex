@@ -22,8 +22,8 @@ defmodule Kinde.Application do
   defp management_api do
     opts =
       :kinde
-      |> Application.get_env(Kinde.ManagementAPI, [])
-      |> Keyword.take(~w[client_id client_secret]a)
+      |> Application.get_env(:management_api, [])
+      |> Keyword.take(~w[business_domain client_id client_secret req_opts]a)
 
     case Application.fetch_env(:kinde, :domain) do
       {:ok, domain} ->

@@ -17,7 +17,9 @@ defmodule Kinde.TestHelpers do
     |> Base.encode16(case: :lower)
   end
 
-  def generate_user, do: generate_user(generate_kinde_id())
+  def generate_user do
+    generate_user(generate_kinde_id())
+  end
 
   def generate_user(id) do
     %{
