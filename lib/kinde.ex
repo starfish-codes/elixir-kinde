@@ -3,7 +3,7 @@ defmodule Kinde do
   Supports OpenID Connect with PKCE
   """
 
-  alias Kinde.{StateManagement, Token, URL}
+  alias Kinde.{MissingConfigError, ObtainingTokenError, StateManagement, Token, URL}
 
   require Logger
 
@@ -39,10 +39,8 @@ defmodule Kinde do
 
   """
   @spec auth(config(), map()) :: {:ok, String.t()} | {:error, term()}
-  def auth(config, extra_params \\ %{}) do
-    config = load_config_from_app_env(config)
-
-    with :ok <- check_config(config),
+  def auth(config \\ %{}, extra_params \\ %{}) do
+    with {:ok, config} <- load_config_from_app_env(config),
          {verifier, challenge} = pkce(),
          {:ok, state} <- create_state(verifier, extra_params) do
       auth(config, challenge, state)
@@ -62,26 +60,17 @@ defmodule Kinde do
 
   @doc """
   Returns the token for Kinde Client
-
-  ### Examples
-
-      iex> token(%{client_id: "value"}, "base64code", "state_hash")
-      {:ok, %{given_name: "John"}, %{extra_params: "additional data"}}
-
-      iex> auth(%{client_id: "value", client_secret: "value", redirect_uri: "value"})
-      {:error, :missing_config_key}
   """
-  @spec token(config(), String.t(), map()) :: {:ok, map(), map()} | {:error, term()}
-  def token(config \\ %{}, code, state) when is_binary(state) do
-    config = load_config_from_app_env(config)
-
-    with :ok <- check_config(config),
-         {:ok, params} <- take_state(state) do
-      fetch_token(config, code, params)
+  @spec token(String.t(), String.t(), config(), Keyword.t()) ::
+          {:ok, map(), map()} | {:error, term()}
+  def token(code, state, config \\ %{}, opts \\ []) do
+    with {:ok, config} <- load_config_from_app_env(config),
+         {:ok, params} <- StateManagement.take_state(state) do
+      fetch_token(config, code, params, opts)
     end
   end
 
-  defp fetch_token(config, code, %{code_verifier: code_verifier, extra_params: extra_params}) do
+  defp fetch_token(config, code, params, opts) do
     %{
       domain: domain,
       client_id: client_id,
@@ -89,7 +78,12 @@ defmodule Kinde do
       redirect_uri: redirect_uri
     } = config
 
-    params = %{
+    %{
+      code_verifier: code_verifier,
+      extra_params: extra_params
+    } = params
+
+    form = %{
       grant_type: "authorization_code",
       code: code,
       client_id: client_id,
@@ -98,32 +92,27 @@ defmodule Kinde do
       code_verifier: code_verifier
     }
 
-    with {:ok, response} <- token_request(domain, params),
-         {:ok, claims} <- token_response(response) do
+    with {:ok, response} <- run_request(domain, form, opts),
+         {:ok, claims} <- handle_response(response) do
       {:ok, user_params(claims), extra_params}
     end
   end
 
-  defp token_request(domain, params) do
-    opts =
-      :kinde
-      |> Application.get_env(__MODULE__, [])
-      |> Keyword.put(:base_url, URL.base_url(domain))
-      |> Keyword.put(:form, params)
-      |> Keyword.put(:finch, @finch_name)
-
-    Req.post("/oauth2/token", opts)
+  defp run_request(domain, form, opts) do
+    opts
+    |> Keyword.put(:url, "/oauth2/token")
+    |> Keyword.put(:base_url, URL.base_url(domain))
+    |> Keyword.put(:form, form)
+    |> Keyword.put(:finch, @finch_name)
+    |> Req.post()
   end
 
-  defp token_response(%Req.Response{status: 200, body: body}) do
-    body
-    |> Map.fetch!("id_token")
-    |> Token.verify_and_validate()
+  defp handle_response(%Req.Response{status: 200, body: %{"id_token" => token}}) do
+    Token.verify_and_validate(token)
   end
 
-  defp token_response(%Req.Response{status: status}) do
-    Logger.error("Couldn't request token: #{status}")
-    {:error, :no_token}
+  defp handle_response(%Req.Response{status: status, body: body}) do
+    {:error, %ObtainingTokenError{status: status, body: body}}
   end
 
   defp user_params(claims) do
@@ -177,20 +166,29 @@ defmodule Kinde do
     |> URI.encode_query()
   end
 
-  defp take_state(state), do: StateManagement.take_state(state)
-
-  defp check_config(config) do
+  defp load_config_from_app_env(config) do
     @config_keys
-    |> Enum.all?(fn key -> Map.has_key?(config, key) end)
-    |> if(do: :ok, else: {:error, :missing_config_key})
+    |> Enum.reduce(config, &load_config_from_app_env/2)
+    |> check_config()
   end
 
-  defp load_config_from_app_env(config) do
-    Enum.reduce(@config_keys, config, fn key, acc ->
-      case Application.fetch_env(:kinde, key) do
-        {:ok, value} -> Map.put_new(acc, key, value)
-        :error -> acc
-      end
-    end)
+  defp load_config_from_app_env(key, acc) do
+    case Application.fetch_env(:kinde, key) do
+      {:ok, value} ->
+        Map.put_new(acc, key, value)
+
+      :error ->
+        acc
+    end
+  end
+
+  defp check_config(config) do
+    case Enum.reject(@config_keys, fn key -> Map.has_key?(config, key) end) do
+      [] ->
+        {:ok, config}
+
+      missing_keys ->
+        {:error, %MissingConfigError{keys: missing_keys}}
+    end
   end
 end

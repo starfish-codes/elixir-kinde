@@ -10,11 +10,14 @@ defmodule Kinde.TestClients.ListUsersSuccess do
   alias Plug.Conn
 
   @impl Plug
-  def init(opts), do: opts
+  def init(opts) do
+    opts
+  end
 
   @impl Plug
-  def call(%Conn{request_path: "/oauth2/token"} = conn, opts),
-    do: RenewTokenSuccess.call(conn, opts)
+  def call(%Conn{request_path: "/oauth2/token"} = conn, opts) do
+    RenewTokenSuccess.call(conn, opts)
+  end
 
   def call(%Conn{request_path: "/api/v1/users", query_params: query_params} = conn, opts) do
     next_token = Map.get(query_params, "next_token")
@@ -31,7 +34,9 @@ defmodule Kinde.TestClients.ListUsersSuccess do
     })
   end
 
-  defp already_sent(nil), do: 0
+  defp already_sent(nil) do
+    0
+  end
 
   defp already_sent(next_token) do
     next_token
@@ -47,10 +52,13 @@ defmodule Kinde.TestClients.ListUsersSuccess do
     end
   end
 
-  defp generate_users(users_count) when users_count > 0,
-    do: Enum.map(1..users_count, fn _index -> generate_user() end)
+  defp generate_users(users_count) when users_count > 0 do
+    Enum.map(1..users_count, fn _index -> generate_user() end)
+  end
 
-  defp generate_users(_users_count), do: nil
+  defp generate_users(_users_count) do
+    nil
+  end
 
   defp next_token(count, total) when count < total do
     %{count: count}
@@ -58,5 +66,7 @@ defmodule Kinde.TestClients.ListUsersSuccess do
     |> Base.encode64()
   end
 
-  defp next_token(_sent, _total), do: nil
+  defp next_token(_sent, _total) do
+    nil
+  end
 end

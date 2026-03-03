@@ -13,17 +13,20 @@ defmodule Kinde.TestClients.GetUserError do
   def init(opts), do: opts
 
   @impl Plug
-  def call(%Conn{request_path: "/oauth2/token"} = conn, opts),
-    do: RenewTokenSuccess.call(conn, opts)
+  def call(%Conn{request_path: "/oauth2/token"} = conn, opts) do
+    RenewTokenSuccess.call(conn, opts)
+  end
 
-  def call(%Conn{request_path: "/api/v1/user"} = conn, _opts) do
+  def call(%Conn{request_path: "/api/v1/user"} = conn, opts) do
     conn
     |> put_status(400)
-    |> json(%{
-      "errors" => [
-        %{"code" => "ID_REQUIRED", "message" => "ID is required"},
-        %{"code" => "USER_INVALID", "message" => "User invalid"}
-      ]
-    })
+    |> json(%{"errors" => Keyword.get_lazy(opts, :errors, &errors/0)})
+  end
+
+  defp errors do
+    [
+      %{"code" => "ID_REQUIRED", "message" => "ID is required"},
+      %{"code" => "USER_INVALID", "message" => "User invalid"}
+    ]
   end
 end

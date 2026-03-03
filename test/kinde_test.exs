@@ -1,7 +1,6 @@
 defmodule KindeTest do
   use ExUnit.Case
 
-  import ExUnit.CaptureLog
   import Kinde.TestHelpers
   import Plug.Conn
   import Req.Test
@@ -13,7 +12,7 @@ defmodule KindeTest do
   @moduletag :set_req_test_from_context
 
   setup do
-    domain = Faker.Internet.url()
+    domain = "https://" <> Faker.Internet.domain_name()
 
     config = %{
       domain: domain,
@@ -46,10 +45,26 @@ defmodule KindeTest do
     end
 
     test "returns error if missing config attribute", %{config: config} do
-      assert {:error, :missing_config_key} =
+      assert {:error, %Kinde.MissingConfigError{} = exception} =
                config
                |> Map.delete(:domain)
                |> Kinde.auth()
+
+      assert "Missing kinde configuration keys: domain" = Exception.message(exception)
+    end
+
+    test "can load configuration from the app env", %{config: config, domain: domain} do
+      Enum.each(config, fn {name, value} -> Application.put_env(:kinde, name, value) end)
+
+      on_exit(fn ->
+        Enum.each(config, fn {name, _value} -> Application.delete_env(:kinde, name) end)
+      end)
+
+      assert {:ok, redirect_url} = Kinde.auth()
+      assert String.starts_with?(redirect_url, "#{domain}/oauth2/auth?")
+
+      %URI{query: query} = URI.parse(redirect_url)
+      assert %{"scope" => "openid profile email offline"} = URI.decode_query(query)
     end
   end
 
@@ -76,7 +91,14 @@ defmodule KindeTest do
         extra_params: extra_params
       })
 
-      %{kinde_id: kinde_id, claims: claims, id_token: id_token, code: code, state: state}
+      %{
+        kinde_id: kinde_id,
+        claims: claims,
+        id_token: id_token,
+        code: code,
+        state: state,
+        opts: [plug: {Req.Test, Kinde}, retry: false]
+      }
     end
 
     test "returns token properly", %{
@@ -84,7 +106,8 @@ defmodule KindeTest do
       code: code,
       state: state,
       id_token: id_token,
-      claims: claims
+      claims: claims,
+      opts: opts
     } do
       expect(Kinde, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -92,7 +115,7 @@ defmodule KindeTest do
         json(conn, %{"id_token" => id_token})
       end)
 
-      assert {:ok, params, _extra_params} = Kinde.token(config, code, state)
+      assert {:ok, params, _extra_params} = Kinde.token(code, state, config, opts)
 
       assert params[:id] == Map.fetch!(claims, "sub")
       assert params[:given_name] == Map.fetch!(claims, "given_name")
@@ -104,6 +127,7 @@ defmodule KindeTest do
     @tag extra_params: %{"token-test" => true}
     test "returns extra params properly", %{
       config: config,
+      opts: opts,
       code: code,
       state: state,
       id_token: id_token,
@@ -111,25 +135,33 @@ defmodule KindeTest do
     } do
       expect(Kinde, &json(&1, %{"id_token" => id_token}))
 
-      assert {:ok, _params, ^extra_params} = Kinde.token(config, code, state)
+      assert {:ok, _params, ^extra_params} = Kinde.token(code, state, config, opts)
     end
 
     test "returns error no_token when request for token fails", %{
+      opts: opts,
       config: config,
       code: code,
       state: state
     } do
       expect(Kinde, &send_resp(&1, 500, "internal server error"))
-      {result, log} = with_log(fn -> Kinde.token(config, code, state) end)
-      assert {:error, :no_token} = result
-      assert log =~ "Couldn't request token: 500"
+      {:error, error} = Kinde.token(code, state, config, opts)
+      assert %Kinde.ObtainingTokenError{status: 500} = error
     end
 
     test "returns error if missing config attribute", %{config: config, code: code, state: state} do
-      assert {:error, :missing_config_key} =
-               config
-               |> Map.delete(:client_id)
-               |> Kinde.token(code, state)
+      config = Map.delete(config, :client_id)
+      assert {:error, %Kinde.MissingConfigError{} = exception} = Kinde.token(code, state, config)
+      assert "Missing kinde configuration keys: client_id" = Exception.message(exception)
+    end
+
+    test "returns error if state does not exist", %{
+      opts: opts,
+      config: config,
+      code: code
+    } do
+      assert {:error, ex} = Kinde.token(code, "does-not-exist", config, opts)
+      assert "OIDC state was not found: does-not-exist" = Exception.message(ex)
     end
   end
 end

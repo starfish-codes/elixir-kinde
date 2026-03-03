@@ -8,7 +8,8 @@ defmodule Kinde.MixProject do
       elixir: "~> 1.16",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      test_coverage: [tool: ExCoveralls]
     ]
   end
 
@@ -20,6 +21,17 @@ defmodule Kinde.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test
+      ]
+    ]
+  end
+
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
@@ -27,11 +39,13 @@ defmodule Kinde.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:finch, "~> 0.19.0"},
+      {:req, "~> 0.5.17"},
       {:joken_jwks, "~> 1.6"},
-      {:req, "~> 0.5.8"},
       {:plug, "~> 1.16", only: [:test]},
-      {:faker, "~> 0.18.0", only: [:test]}
+      {:faker, "~> 0.18.0", only: [:test]},
+      {:excoveralls, "~> 0.18.5", only: :test},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 end

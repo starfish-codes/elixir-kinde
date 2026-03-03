@@ -1,6 +1,6 @@
 defmodule Kinde.TokenStrategy do
   @moduledoc """
-  JWKS strategy to verify access token. This is default strategy for the Kinde.IdToken
+  JWKS strategy to verify access token. This is default strategy for the Kinde.Token
 
   See https://docs.kinde.com/developer-tools/about/using-kinde-without-an-sdk/#verifying-the-kinde-access-token
   """
@@ -31,7 +31,7 @@ defmodule Kinde.TokenStrategy do
 
       :error ->
         opts
-        |> Keyword.put(:jwks_url, true)
+        |> Keyword.put(:jwks_url, "dummy-url")
         |> Keyword.put(:first_fetch_sync, false)
         |> Keyword.put(:should_start, false)
     end

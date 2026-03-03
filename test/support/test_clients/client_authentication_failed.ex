@@ -11,7 +11,9 @@ defmodule Kinde.TestClients.ClientAuthenticationFailed do
                        "or unsupported authentication method)."
 
   @impl Plug
-  def init(opts), do: opts
+  def init(opts) do
+    opts
+  end
 
   @impl Plug
   def call(conn, _opts) do

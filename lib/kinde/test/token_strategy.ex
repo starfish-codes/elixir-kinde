@@ -1,4 +1,8 @@
 defmodule Kinde.Test.TokenStrategy do
+  @moduledoc """
+  Token Strategy for Kinde.Token to be used in tests
+  """
+
   @behaviour JokenJwks.SignerMatchStrategy
 
   @kid "testkid"

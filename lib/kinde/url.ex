@@ -28,7 +28,7 @@ defmodule Kinde.URL do
   end
 
   defp parse(url) when is_binary(url), do: parse(URI.parse(url))
-  defp parse(url = %URI{scheme: nil}), do: parse("https://#{to_string(url)}")
-  defp parse(url = %URI{path: nil}), do: parse("#{to_string(url)}/")
-  defp parse(url), do: url
+  defp parse(%URI{scheme: nil} = url), do: parse("https://#{to_string(url)}")
+  defp parse(%URI{path: nil} = url), do: parse("#{to_string(url)}/")
+  defp parse(%URI{} = url), do: url
 end
