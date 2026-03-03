@@ -1,8 +1,21 @@
 defmodule Kinde.ManagementAPI do
   @moduledoc """
-  Maintains access token for the Management API
+  Client for the [Kinde Management API](https://docs.kinde.com/kinde-apis/management/).
 
-  See https://docs.kinde.com/kinde-apis/management/
+  Starts as a GenServer under the application supervisor and automatically
+  obtains and renews an access token using the client credentials flow.
+
+  ## Configuration
+
+      config :kinde, :management_api,
+        client_id: "management_client_id",
+        client_secret: "management_client_secret",
+        business_domain: "https://yourapp.kinde.com"  # defaults to :domain
+
+  If `:business_domain` is not set, the top-level `:domain` config value is used.
+
+  The server returns `:ignore` on startup when required keys are missing, so the
+  application can still boot without Management API credentials.
   """
 
   use GenServer
@@ -16,12 +29,15 @@ defmodule Kinde.ManagementAPI do
   @retry_timeout :timer.minutes(5)
 
   @doc """
-  Returns a registered user on Kinde
+  Fetches a user by their Kinde ID.
+
+  Returns `{:ok, user_map}` on success, `{:error, %APIError{}}` on API errors,
+  or `{:error, %NoAccessTokenError{}}` if the access token hasn't been obtained yet.
 
   ## Examples
 
-      iex> get_user("kid1223")
-      {:ok, %{"first_name" => "Mary", "last_name" => "Doe"}}
+      iex> Kinde.ManagementAPI.get_user("kp_abc123def456")
+      {:ok, %{"first_name" => "Mary", "last_name" => "Doe", ...}}
 
   """
   @spec get_user(String.t(), GenServer.server()) :: {:ok, map()} | {:error, term()}
@@ -34,12 +50,14 @@ defmodule Kinde.ManagementAPI do
   end
 
   @doc """
-  Returns a list of users registered on Kinde
+  Fetches all users, handling pagination automatically.
+
+  Returns `{:ok, [user_map]}` with a flat list of all users across all pages.
 
   ## Examples
 
-      iex> list_users()
-      {:ok, %{"users" => [%{name: "John"}], "next_token" => "Mjc6OjpuYW1lX2FzYw=="}}
+      iex> Kinde.ManagementAPI.list_users()
+      {:ok, [%{"first_name" => "John", ...}, %{"first_name" => "Jane", ...}]}
 
   """
   @spec list_users(GenServer.server()) :: {:ok, [map()]} | {:error, term()}
@@ -95,6 +113,7 @@ defmodule Kinde.ManagementAPI do
     {:error, %APIError{status: status, errors: [body]}}
   end
 
+  @doc false
   @spec start_link(Keyword.t()) :: GenServer.on_start()
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name, __MODULE__)

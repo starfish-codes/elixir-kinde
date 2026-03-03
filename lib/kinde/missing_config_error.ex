@@ -1,6 +1,8 @@
 defmodule Kinde.MissingConfigError do
   @moduledoc """
-  Missing config keys detected
+  Returned when required configuration keys (`:domain`, `:client_id`,
+  `:client_secret`, `:redirect_uri`) are missing from both the function
+  arguments and the application environment.
   """
 
   @type t() :: %__MODULE__{

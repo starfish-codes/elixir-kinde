@@ -1,7 +1,9 @@
 defmodule Kinde.ObtainingTokenError do
   @moduledoc """
-  Obtaining of the token failed.
-  Effectively it means that `/oauth2/token` request was finished with an error
+  Returned when the `/oauth2/token` request fails.
+
+  Contains the HTTP `status` code and the response `body` (either a parsed
+  map with `"error"` / `"error_description"` keys, or a raw binary).
   """
 
   @type t() :: %__MODULE__{

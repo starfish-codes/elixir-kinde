@@ -1,6 +1,7 @@
 defmodule Kinde.StateNotFoundError do
   @moduledoc """
-  When OIDC state wasn't found
+  Returned by `Kinde.token/4` when the OAuth state parameter is not found
+  in state management (expired, already consumed, or never created).
   """
 
   @type t() :: %__MODULE__{

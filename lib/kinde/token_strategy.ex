@@ -1,8 +1,12 @@
 defmodule Kinde.TokenStrategy do
   @moduledoc """
-  JWKS strategy to verify access token. This is default strategy for the Kinde.Token
+  JWKS strategy for verifying ID tokens in production.
 
-  See https://docs.kinde.com/developer-tools/about/using-kinde-without-an-sdk/#verifying-the-kinde-access-token
+  Fetches the JSON Web Key Set from `<domain>/.well-known/jwks` and validates
+  RS256 signatures. Used automatically by `Kinde.Token` unless the
+  `:test_strategy` config flag is set.
+
+  See [Kinde docs on token verification](https://docs.kinde.com/developer-tools/about/using-kinde-without-an-sdk/#verifying-the-kinde-access-token).
   """
 
   use JokenJwks.DefaultStrategyTemplate

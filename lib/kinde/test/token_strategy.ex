@@ -1,6 +1,14 @@
 defmodule Kinde.Test.TokenStrategy do
   @moduledoc """
-  Token Strategy for Kinde.Token to be used in tests
+  Test token strategy that signs JWTs with a local RSA key from `priv/keys/key.pem`.
+
+  Activated by setting `config :kinde, test_strategy: true` (typically in `config/test.exs`).
+  Bypasses JWKS endpoint verification so tests can run without network access.
+
+  Use `sign/1` to generate valid test tokens:
+
+      claims = %{"sub" => "kp_abc123", "email" => "test@example.com"}
+      {:ok, token} = Kinde.Test.TokenStrategy.sign(claims)
   """
 
   @behaviour JokenJwks.SignerMatchStrategy

@@ -1,6 +1,9 @@
 defmodule Kinde.StateManagementAgent do
   @moduledoc """
-  Simple State Management implementation. Used by default
+  Default in-memory state management using `Agent`.
+
+  Suitable for single-node deployments. For multi-node setups, implement
+  the `Kinde.StateManagement` behaviour with a shared store.
   """
 
   @behaviour Kinde.StateManagement

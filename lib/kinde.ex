@@ -1,6 +1,35 @@
 defmodule Kinde do
   @moduledoc """
-  Supports OpenID Connect with PKCE
+  OpenID Connect authentication with PKCE for [Kinde](https://kinde.com).
+
+  Provides two main functions:
+
+    * `auth/2` — generates an OAuth2 authorization URL and stores the PKCE
+      code verifier in state management
+    * `token/4` — exchanges the authorization code for an ID token,
+      verifies it, and returns user attributes
+
+  ## Configuration
+
+  Required keys can be set via application config or passed directly as a map:
+
+      config :kinde,
+        domain: "https://yourapp.kinde.com",
+        client_id: "client_id",
+        client_secret: "client_secret",
+        redirect_uri: "http://localhost:4000/callback"
+
+  When a map is passed to `auth/2` or `token/4`, its values take precedence
+  over the application config. See the "All configuration keys" section in
+  the README for a complete reference.
+
+  ## Example
+
+      # Step 1: redirect user to Kinde
+      {:ok, url} = Kinde.auth()
+
+      # Step 2: handle the callback
+      {:ok, user, extra_params} = Kinde.token(code, state)
   """
 
   alias Kinde.{MissingConfigError, ObtainingTokenError, StateManagement, Token, URL}
@@ -27,15 +56,22 @@ defmodule Kinde do
   @finch_name Kinde.Finch
 
   @doc """
-  Generates the OAuth2 redirect url
+  Generates an OAuth2 authorization URL with PKCE.
 
-  ### Examples
+  Accepts an optional `config` map (overrides app env) and an optional
+  `extra_params` map that will be returned alongside user data after
+  a successful `token/4` call.
 
-      iex> auth(%{domain: "https://myapp...", client_id: "value", client_secret: "value", redirect_uri: "value"})
-      {:ok, "https://myapp.com/oauth2/auth?"}
+  Returns `{:ok, url}` on success or `{:error, %MissingConfigError{}}` when
+  required configuration keys are missing.
 
-      iex> auth(%{client_id: "value", client_secret: "value", redirect_uri: "value"})
-      {:error, :missing_config_key}
+  ## Examples
+
+      iex> Kinde.auth()
+      {:ok, "https://yourapp.kinde.com/oauth2/auth?..."}
+
+      iex> Kinde.auth(%{}, %{return_to: "/dashboard"})
+      {:ok, "https://yourapp.kinde.com/oauth2/auth?..."}
 
   """
   @spec auth(config(), map()) :: {:ok, String.t()} | {:error, term()}
@@ -59,7 +95,20 @@ defmodule Kinde do
   end
 
   @doc """
-  Returns the token for Kinde Client
+  Exchanges an authorization code for user attributes.
+
+  Takes the `code` and `state` from the Kinde callback, verifies the ID token
+  via JWKS, and returns user attributes along with any `extra_params` that were
+  passed to `auth/2`.
+
+  Returns `{:ok, user_params, extra_params}` on success, where `user_params`
+  is a map with keys: `:id`, `:given_name`, `:family_name`, `:email`, `:picture`.
+
+  ## Errors
+
+    * `{:error, %ObtainingTokenError{}}` — the token endpoint returned an error
+    * `{:error, %StateNotFoundError{}}` — the state was not found (expired or already used)
+    * `{:error, %MissingConfigError{}}` — required config keys are missing
   """
   @spec token(String.t(), String.t(), config(), Keyword.t()) ::
           {:ok, map(), map()} | {:error, term()}

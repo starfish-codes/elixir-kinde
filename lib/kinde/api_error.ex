@@ -1,6 +1,8 @@
 defmodule Kinde.APIError do
   @moduledoc """
-  Represents Kinde API errored response
+  Returned when the Kinde Management API responds with a non-200 status.
+
+  Contains the HTTP `status` code and a list of `errors` from the response body.
   """
 
   @type t() :: %__MODULE__{

@@ -1,6 +1,9 @@
 defmodule Kinde.URL do
   @moduledoc """
-  Provides URL helpers
+  URL helpers for building Kinde endpoint URLs.
+
+  Handles domain normalization: adds `https://` scheme if missing and ensures
+  a trailing path segment for correct `URI.append_path/2` behavior.
   """
 
   @spec base_url(String.t()) :: String.t()

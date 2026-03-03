@@ -1,7 +1,8 @@
 defmodule Kinde.NoAccessTokenError do
   @moduledoc """
-  Could be returned by management API server when it didn't manage to obtain
-  access token prior to the API call per se
+  Returned by `Kinde.ManagementAPI` when an API call is made before the
+  access token has been obtained (e.g. right after startup or after a
+  renewal failure).
   """
 
   @type t() :: %__MODULE__{}
