@@ -1,17 +1,20 @@
 defmodule Kinde.MixProject do
   use Mix.Project
 
+  @name "Kinde"
+  @version "0.1.0"
+  @repo_url "https://github.com/starfish-codes/elixir-kinde"
+
   def project do
     [
       app: :kinde,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.16",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       test_coverage: [tool: ExCoveralls],
-      name: "Kinde",
-      source_url: "https://github.com/starfish-codes/elixir-kinde",
+      source_url: @repo_url,
       description: "Elixir SDK for Kinde authentication (OIDC + PKCE) and Management API",
       docs: docs(),
       package: package()
@@ -49,13 +52,6 @@ defmodule Kinde.MixProject do
     ]
   end
 
-  defp package do
-    [
-      licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/starfish-codes/elixir-kinde"}
-    ]
-  end
-
   defp deps do
     [
       {:req, "~> 0.5.17"},
@@ -66,6 +62,21 @@ defmodule Kinde.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.35", only: :dev, runtime: false}
+    ]
+  end
+
+  defp package do
+    [
+      links: %{"GitHub" => @repo_url},
+      licenses: ["MIT"]
+    ]
+  end
+
+  defp docs do
+    [
+      source_ref: "v#{@version}",
+      source_url: @repo_url,
+      main: @name
     ]
   end
 end
