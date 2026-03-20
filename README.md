@@ -69,6 +69,16 @@ If required keys are missing, the Management API server is not started (returns 
 |-----|----------|---------|-------------|
 | `:state_management_impl` | no | `Kinde.StateManagementAgent` | Module implementing `Kinde.StateManagement` behaviour |
 
+#### Tesla adapter
+
+Token verification fetches JWKS from Kinde's endpoint via [JokenJwks](https://hexdocs.pm/joken_jwks/JokenJwks.HttpFetcher.html), which uses Tesla under the hood. Configure a Tesla adapter in your application:
+
+```elixir
+config :tesla, JokenJwks.HttpFetcher, adapter: {Tesla.Adapter.Finch, name: Finch}
+```
+
+See the [JokenJwks.HttpFetcher docs](https://hexdocs.pm/joken_jwks/JokenJwks.HttpFetcher.html) for details.
+
 #### Testing
 
 | Key | Required | Default | Description |
