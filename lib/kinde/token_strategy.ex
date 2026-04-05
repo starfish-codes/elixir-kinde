@@ -13,6 +13,8 @@ defmodule Kinde.TokenStrategy do
 
   alias Kinde.URL
 
+  require Logger
+
   @spec init_opts(opts :: Keyword.t()) :: Keyword.t()
   def init_opts(opts) do
     opts
@@ -30,14 +32,22 @@ defmodule Kinde.TokenStrategy do
 
   defp put_jwks_url(opts) do
     case Application.fetch_env(:kinde, :domain) do
+      {:ok, domain} when domain in ["", nil] ->
+        Logger.warning("Kinde domain is configured empty — Kinde token verification is disabled")
+        disable(opts)
+
       {:ok, domain} ->
         Keyword.put(opts, :jwks_url, URL.jwks_url(domain))
 
       :error ->
-        opts
-        |> Keyword.put(:jwks_url, "dummy-url")
-        |> Keyword.put(:first_fetch_sync, false)
-        |> Keyword.put(:should_start, false)
+        disable(opts)
     end
+  end
+
+  defp disable(opts) do
+    opts
+    |> Keyword.put(:jwks_url, "dummy-url")
+    |> Keyword.put(:first_fetch_sync, false)
+    |> Keyword.put(:should_start, false)
   end
 end
