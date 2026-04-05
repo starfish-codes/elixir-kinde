@@ -44,14 +44,6 @@ defmodule Kinde.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
-  defp docs do
-    [
-      main: "readme",
-      extras: ["README.md"],
-      source_ref: "main"
-    ]
-  end
-
   defp deps do
     [
       {:req, "~> 0.5.17"},
