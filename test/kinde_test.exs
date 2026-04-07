@@ -80,7 +80,14 @@ defmodule KindeTest do
         "picture" => Faker.Internet.url()
       }
 
+      access_token_claims = %{
+        "sub" => kinde_id,
+        "permissions" => ["manage-extensions"],
+        "org_code" => "org_test123"
+      }
+
       {:ok, id_token} = TokenStrategy.sign(claims)
+      {:ok, access_token} = TokenStrategy.sign(access_token_claims)
 
       code = Faker.String.base64()
       state = Faker.String.base64(44)
@@ -94,7 +101,9 @@ defmodule KindeTest do
       %{
         kinde_id: kinde_id,
         claims: claims,
+        access_token_claims: access_token_claims,
         id_token: id_token,
+        access_token: access_token,
         code: code,
         state: state,
         opts: [plug: {Req.Test, Kinde}, retry: false]
@@ -106,22 +115,40 @@ defmodule KindeTest do
       code: code,
       state: state,
       id_token: id_token,
+      access_token: access_token,
       claims: claims,
+      access_token_claims: access_token_claims,
       opts: opts
     } do
       expect(Kinde, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         assert %{"code" => ^code} = URI.decode_query(body)
-        json(conn, %{"id_token" => id_token})
+
+        json(conn, %{
+          "id_token" => id_token,
+          "access_token" => access_token,
+          "refresh_token" => "test-refresh-token",
+          "expires_in" => 86_399,
+          "scope" => "openid profile email offline",
+          "token_type" => "bearer"
+        })
       end)
 
-      assert {:ok, params, _extra_params} = Kinde.token(code, state, config, opts)
+      assert {:ok, token_response, _extra_params} = Kinde.token(code, state, config, opts)
 
-      assert params[:id] == Map.fetch!(claims, "sub")
-      assert params[:given_name] == Map.fetch!(claims, "given_name")
-      assert params[:family_name] == Map.fetch!(claims, "family_name")
-      assert params[:email] == Map.fetch!(claims, "email")
-      assert params[:picture] == Map.fetch!(claims, "picture")
+      assert token_response.id_token == id_token
+      assert token_response.id_token_claims["sub"] == Map.fetch!(claims, "sub")
+      assert token_response.id_token_claims["given_name"] == Map.fetch!(claims, "given_name")
+      assert token_response.id_token_claims["family_name"] == Map.fetch!(claims, "family_name")
+      assert token_response.id_token_claims["email"] == Map.fetch!(claims, "email")
+      assert token_response.id_token_claims["picture"] == Map.fetch!(claims, "picture")
+      assert token_response.access_token == access_token
+      assert token_response.access_token_claims["sub"] == access_token_claims["sub"]
+      assert token_response.access_token_claims["permissions"] == ["manage-extensions"]
+      assert token_response.refresh_token == "test-refresh-token"
+      assert token_response.expires_in == 86_399
+      assert token_response.scope == "openid profile email offline"
+      assert token_response.token_type == "bearer"
     end
 
     @tag extra_params: %{"token-test" => true}
@@ -131,11 +158,63 @@ defmodule KindeTest do
       code: code,
       state: state,
       id_token: id_token,
+      access_token: access_token,
       extra_params: extra_params
+    } do
+      expect(Kinde, &json(&1, %{"id_token" => id_token, "access_token" => access_token}))
+
+      assert {:ok, _token_response, ^extra_params} = Kinde.token(code, state, config, opts)
+    end
+
+    test "returns empty claims when access_token is absent", %{
+      config: config,
+      opts: opts,
+      code: code,
+      state: state,
+      id_token: id_token,
+      claims: claims
     } do
       expect(Kinde, &json(&1, %{"id_token" => id_token}))
 
-      assert {:ok, _params, ^extra_params} = Kinde.token(code, state, config, opts)
+      assert {:ok, token_response, _extra_params} = Kinde.token(code, state, config, opts)
+
+      assert token_response.id_token_claims["sub"] == Map.fetch!(claims, "sub")
+      assert token_response.access_token == nil
+      assert token_response.access_token_claims == %{}
+    end
+
+    test "returns empty claims when id_token is absent", %{
+      config: config,
+      opts: opts,
+      code: code,
+      state: state,
+      access_token: access_token,
+      access_token_claims: access_token_claims
+    } do
+      expect(Kinde, &json(&1, %{"access_token" => access_token}))
+
+      assert {:ok, token_response, _extra_params} = Kinde.token(code, state, config, opts)
+
+      assert token_response.access_token_claims["sub"] == access_token_claims["sub"]
+      assert token_response.id_token == nil
+      assert token_response.id_token_claims == %{}
+    end
+
+    test "returns nil for missing optional fields", %{
+      config: config,
+      opts: opts,
+      code: code,
+      state: state,
+      id_token: id_token
+    } do
+      expect(Kinde, &json(&1, %{"id_token" => id_token}))
+
+      assert {:ok, token_response, _extra_params} = Kinde.token(code, state, config, opts)
+
+      assert token_response.refresh_token == nil
+      assert token_response.expires_in == nil
+      assert token_response.scope == nil
+      assert token_response.token_type == nil
     end
 
     test "returns error no_token when request for token fails", %{
