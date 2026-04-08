@@ -29,7 +29,7 @@ defmodule Kinde do
       {:ok, url} = Kinde.auth()
 
       # Step 2: handle the callback
-      {:ok, user, extra_params} = Kinde.token(code, state)
+      {:ok, token_response, extra_params} = Kinde.token(code, state)
   """
 
   alias Kinde.{MissingConfigError, ObtainingTokenError, StateManagement, Token, URL}
@@ -48,6 +48,17 @@ defmodule Kinde do
   @type state_params :: %{
           code_verifier: String.t(),
           extra_params: map()
+        }
+
+  @type token_response :: %{
+          access_token: String.t(),
+          access_token_claims: map(),
+          id_token: String.t(),
+          id_token_claims: map(),
+          refresh_token: String.t(),
+          expires_in: non_neg_integer(),
+          scope: String.t(),
+          token_type: String.t()
         }
 
   @scopes ~w[openid profile email offline]
@@ -101,8 +112,9 @@ defmodule Kinde do
   via JWKS, and returns user attributes along with any `extra_params` that were
   passed to `auth/2`.
 
-  Returns `{:ok, user_params, extra_params}` on success, where `user_params`
-  is a map with keys: `:id`, `:given_name`, `:family_name`, `:email`, `:picture`.
+  Returns `{:ok, token_response, extra_params}` on success, where
+  `token_response` is a `t:token_response/0` map containing the full OAuth2
+  token endpoint response including decoded JWT claims.
 
   ## Errors
 
@@ -111,7 +123,7 @@ defmodule Kinde do
     * `{:error, %MissingConfigError{}}` — required config keys are missing
   """
   @spec token(String.t(), String.t(), config(), Keyword.t()) ::
-          {:ok, map(), map()} | {:error, term()}
+          {:ok, token_response(), map()} | {:error, term()}
   def token(code, state, config \\ %{}, opts \\ []) do
     with {:ok, config} <- load_config_from_app_env(config),
          {:ok, params} <- StateManagement.take_state(state) do
@@ -142,8 +154,8 @@ defmodule Kinde do
     }
 
     with {:ok, response} <- run_request(domain, form, opts),
-         {:ok, claims} <- handle_response(response) do
-      {:ok, user_params(claims), extra_params}
+         {:ok, token_response} <- decode_token_response(response) do
+      {:ok, token_response, extra_params}
     end
   end
 
@@ -156,23 +168,29 @@ defmodule Kinde do
     |> Req.post()
   end
 
-  defp handle_response(%Req.Response{status: 200, body: %{"id_token" => token}}) do
-    Token.verify_and_validate(token)
+  defp decode_token_response(%Req.Response{status: 200, body: body}) do
+    with {:ok, id_token_claims} <- verify_token(body["id_token"]),
+         {:ok, access_token_claims} <- verify_token(body["access_token"]) do
+      {:ok,
+       %{
+         access_token: body["access_token"],
+         access_token_claims: access_token_claims,
+         id_token: body["id_token"],
+         id_token_claims: id_token_claims,
+         refresh_token: body["refresh_token"],
+         expires_in: body["expires_in"],
+         scope: body["scope"],
+         token_type: body["token_type"]
+       }}
+    end
   end
 
-  defp handle_response(%Req.Response{status: status, body: body}) do
+  defp decode_token_response(%Req.Response{status: status, body: body}) do
     {:error, %ObtainingTokenError{status: status, body: body}}
   end
 
-  defp user_params(claims) do
-    %{
-      id: claims["sub"],
-      given_name: claims["given_name"],
-      family_name: claims["family_name"],
-      email: claims["email"],
-      picture: claims["picture"]
-    }
-  end
+  defp verify_token(nil), do: {:ok, %{}}
+  defp verify_token(token), do: Token.verify_and_validate(token)
 
   defp pkce do
     verifier =
