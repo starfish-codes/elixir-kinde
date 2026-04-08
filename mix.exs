@@ -2,7 +2,7 @@ defmodule Kinde.MixProject do
   use Mix.Project
 
   @name "Kinde"
-  @version "1.0.1"
+  @version "2.0.0"
   @repo_url "https://github.com/starfish-codes/elixir-kinde"
 
   def project do
