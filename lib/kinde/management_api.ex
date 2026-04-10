@@ -65,7 +65,11 @@ defmodule Kinde.ManagementAPI do
   def delete_mfa(kinde_id, server \\ __MODULE__) do
     with {:ok, request} <- GenServer.call(server, :build_request),
          {:ok, response} <-
-           Req.request(request, url: "/api/v1/users/#{kinde_id}/mfa", method: :delete),
+           Req.request(request,
+             url: "/api/v1/users/:kinde_id/mfa",
+             method: :delete,
+             path_params: [kinde_id: kinde_id]
+           ),
          %Req.Response{status: status, body: body} = response,
          {:ok, _body} <- handle_response(status, body) do
       :ok
