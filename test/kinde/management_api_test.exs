@@ -10,6 +10,8 @@ defmodule Kinde.ManagementAPITest do
 
   alias Kinde.TestClients.{
     ClientAuthenticationFailed,
+    DeleteMfaError,
+    DeleteMfaSuccess,
     GetUserError,
     GetUserSuccess,
     InternalServerError,
@@ -74,6 +76,25 @@ defmodule Kinde.ManagementAPITest do
 
       assert Exception.message(ex) ==
                "Kinde Management API couldn't run the request due to lacking of the access token"
+    end
+  end
+
+  describe "delete_mfa/2" do
+    @tag stub_with: DeleteMfaSuccess
+    test "success", %{pid: pid} do
+      assert :ok = ManagementAPI.delete_mfa(generate_kinde_id(), pid)
+    end
+
+    @tag stub_with: DeleteMfaError
+    test "error", %{pid: pid} do
+      assert {:error, %Kinde.APIError{} = ex} = ManagementAPI.delete_mfa("does-not-matter", pid)
+      assert Exception.message(ex) =~ "MFA_NOT_FOUND"
+    end
+
+    @tag stub_with: ClientAuthenticationFailed
+    test "no token", %{pid: pid} do
+      assert {:error, %Kinde.NoAccessTokenError{}} =
+               ManagementAPI.delete_mfa("does-not-matter", pid)
     end
   end
 

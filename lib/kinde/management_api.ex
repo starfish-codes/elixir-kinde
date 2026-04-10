@@ -50,6 +50,33 @@ defmodule Kinde.ManagementAPI do
   end
 
   @doc """
+  Deletes all MFA settings for a user.
+
+  Returns `:ok` on success, `{:error, %APIError{}}` on API errors,
+  or `{:error, %NoAccessTokenError{}}` if the access token hasn't been obtained yet.
+
+  ## Examples
+
+      iex> Kinde.ManagementAPI.delete_mfa("kp_abc123def456")
+      :ok
+
+  """
+  @spec delete_mfa(String.t(), GenServer.server()) :: :ok | {:error, term()}
+  def delete_mfa(kinde_id, server \\ __MODULE__) do
+    with {:ok, request} <- GenServer.call(server, :build_request),
+         {:ok, response} <-
+           Req.request(request,
+             url: "/api/v1/users/:kinde_id/mfa",
+             method: :delete,
+             path_params: [kinde_id: kinde_id]
+           ),
+         %Req.Response{status: status, body: body} = response,
+         {:ok, _body} <- handle_response(status, body) do
+      :ok
+    end
+  end
+
+  @doc """
   Fetches all users, handling pagination automatically.
 
   Returns `{:ok, [user_map]}` with a flat list of all users across all pages.
